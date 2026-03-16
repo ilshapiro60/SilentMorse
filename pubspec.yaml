@@ -1,0 +1,62 @@
+name: silentmorse_messenger
+description: Silent Morse - Morse code messenger. Communicate in silence.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^4.4.0
+  firebase_auth: ^6.1.4
+  cloud_firestore: ^6.1.2
+  firebase_messaging: ^16.1.1
+  cloud_functions: ^6.0.6
+
+  # Auth providers
+  google_sign_in: ^6.2.1
+  sign_in_with_apple: ^6.1.3
+  crypto: ^3.0.3
+
+  # State & async
+  provider: ^6.1.1
+  rxdart: ^0.27.7
+
+  # Platform
+  vibration: ^2.0.0
+  screen_brightness: ^2.1.7
+
+  # Utils
+  intl: ^0.19.0
+  shared_preferences: ^2.5.4
+
+  # Monetization
+  google_mobile_ads: ^5.2.0
+  in_app_purchase: ^3.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.14.3
+  firebase_auth_mocks: ^0.15.1
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+    - assets/legal/terms_of_service.txt
+    - assets/legal/privacy_policy.txt
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/silent_morse_icon_blue.png
+  remove_alpha_ios: true

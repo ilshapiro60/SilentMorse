@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "747344694468",
+    "project_id": "silent-morse-messenger",
+    "storage_bucket": "silent-morse-messenger.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:747344694468:android:970e97a0dcbdb32a358d91",
+        "android_client_info": {
+          "package_name": "com.silentmorse.messenger"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "747344694468-qc5hfn4e5u0i584bpqs4n77u3le7lkm4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.silentmorse.messenger",
+            "certificate_hash": "9dfd07d4778c8571876bbd2dbda279bd75b66e1c"
+          }
+        },
+        {
+          "client_id": "747344694468-rflplpsq6d6jef3ovrqash6p19vhaduj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvGKx9MIqeVOHeBhRZmW3XUaBB3aiHd0I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "747344694468-rflplpsq6d6jef3ovrqash6p19vhaduj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
