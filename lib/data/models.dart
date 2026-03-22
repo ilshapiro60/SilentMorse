@@ -55,6 +55,8 @@ class MorseSettings {
   final VibrationIntensity vibrationIntensity;
   final ReceiveMode receiveMode;
   final SendMode sendMode;
+  /// Milliseconds of silence after the last tap before auto-sending. 0 = off.
+  final int autoSendDelayMs;
 
   MorseSettings({
     this.dotDurationMs = 100,
@@ -64,6 +66,7 @@ class MorseSettings {
     this.vibrationIntensity = VibrationIntensity.medium,
     this.receiveMode = ReceiveMode.vibrate,
     this.sendMode = SendMode.touchWithText,
+    this.autoSendDelayMs = 3000,
   });
 
   factory MorseSettings.fromMap(dynamic map) {
@@ -191,6 +194,24 @@ class Contact {
 // CHAT
 // ─────────────────────────────────────────────
 
+enum ChatStatus {
+  pending,
+  active,
+  declined;
+
+  static ChatStatus fromString(String? s) {
+    switch (s?.toUpperCase()) {
+      case 'PENDING':
+        return ChatStatus.pending;
+      case 'DECLINED':
+        return ChatStatus.declined;
+      default:
+        // Null/missing field means the chat pre-dates the status feature → treat as active.
+        return ChatStatus.active;
+    }
+  }
+}
+
 class Chat {
   final String id;
   final List<String> participants;
@@ -199,6 +220,8 @@ class Chat {
   final String lastMessageBy;
   final DateTime? lastMessageAt;
   final DateTime? createdAt;
+  final ChatStatus status;
+  final String requesterId;
 
   Chat({
     this.id = '',
@@ -208,9 +231,13 @@ class Chat {
     this.lastMessageBy = '',
     this.lastMessageAt,
     this.createdAt,
+    this.status = ChatStatus.active,
+    this.requesterId = '',
   });
 
   bool get isGroup => participants.length > 2;
+  bool get isPending => status == ChatStatus.pending;
+  bool get isActive => status == ChatStatus.active;
 
   String otherParticipant(String myUserId) =>
       participants.where((id) => id != myUserId).firstOrNull ?? '';
@@ -228,6 +255,8 @@ class Chat {
       lastMessageBy: data['lastMessageBy'] ?? '',
       lastMessageAt: (data['lastMessageAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      status: ChatStatus.fromString(data['status'] as String?),
+      requesterId: data['requesterId'] ?? '',
     );
   }
 }

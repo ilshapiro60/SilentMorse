@@ -7,6 +7,7 @@ const _keyVibrationIntensity = 'vibration_intensity';
 const _keyReceiveMode = 'receive_mode';
 const _keySendMode = 'send_mode';
 const _keySenderDisplayName = 'sender_display_name';
+const _keyAutoSendDelayMs = 'auto_send_delay_ms';
 
 /// Provides MorseSettings with user preferences (receive, send, vibration).
 class MorseSettingsService extends ChangeNotifier {
@@ -26,10 +27,14 @@ class MorseSettingsService extends ChangeNotifier {
   String _senderDisplayName = '';
   String get senderDisplayName => _senderDisplayName;
 
+  int _autoSendDelayMs = 3000;
+  int get autoSendDelayMs => _autoSendDelayMs;
+
   MorseSettings get settings => MorseSettings(
     vibrationIntensity: _vibrationIntensity,
     receiveMode: _receiveMode,
     sendMode: _sendMode,
+    autoSendDelayMs: _autoSendDelayMs,
   );
 
   Future<void> _load() async {
@@ -53,6 +58,11 @@ class MorseSettingsService extends ChangeNotifier {
     }
     if (savedSenderName != null) {
       _senderDisplayName = savedSenderName;
+      changed = true;
+    }
+    final savedAutoSend = prefs.getInt(_keyAutoSendDelayMs);
+    if (savedAutoSend != null) {
+      _autoSendDelayMs = savedAutoSend;
       changed = true;
     }
     if (changed) notifyListeners();
@@ -79,6 +89,14 @@ class MorseSettingsService extends ChangeNotifier {
     _sendMode = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keySendMode, mode.name);
+    notifyListeners();
+  }
+
+  Future<void> setAutoSendDelayMs(int ms) async {
+    if (_autoSendDelayMs == ms) return;
+    _autoSendDelayMs = ms;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyAutoSendDelayMs, ms);
     notifyListeners();
   }
 

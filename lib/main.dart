@@ -1,14 +1,29 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:vibration/vibration.dart';
 
 import 'app.dart';
 import 'firebase_options.dart';
+import 'ui/watch/watch_app.dart';
 import 'services/ad_service.dart';
 import 'services/auth_service.dart';
 import 'services/chat_repository.dart' show ChatRepository, FirestoreChatRepository;
 import 'services/morse_settings_service.dart';
 import 'services/purchase_service.dart';
+
+/// Top-level background message handler — runs in a separate isolate.
+/// Only a single alert buzz; the full morse pattern plays in the foreground.
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (message.data['type'] == 'message') {
+    try {
+      await Vibration.vibrate(duration: 400);
+    } catch (_) {}
+  }
+}
 
 Future<void> _initFirebase() async {
   try {
@@ -31,7 +46,8 @@ final _firebaseInitFuture = _initFirebase();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initAdMob();
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  // AdMob is initialized lazily for phone only (Wear OS has no WebView)
   runApp(const _SilentMorseAppLoader());
 }
 
@@ -46,11 +62,20 @@ class _SilentMorseAppLoader extends StatelessWidget {
       home: FutureBuilder<void>(
         future: _firebaseInitFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
+            if (snapshot.connectionState == ConnectionState.done) {
             if (snapshot.hasError) {
               return _FirebaseErrorScreen(error: snapshot.error);
             }
-            return const SilentMorseApp();
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                // Wear OS: square screen, both dimensions < 500 (384, 454, 480)
+                final isWatch = constraints.maxWidth < 500 && constraints.maxHeight < 500;
+                if (isWatch) {
+                  return const WatchApp();
+                }
+                return const _PhoneAppWithAdMob(child: SilentMorseApp());
+              },
+            );
           }
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -109,6 +134,34 @@ class _FirebaseErrorScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Initializes AdMob only on phone (Wear OS lacks WebView and crashes).
+class _PhoneAppWithAdMob extends StatefulWidget {
+  final Widget child;
+
+  const _PhoneAppWithAdMob({required this.child});
+
+  @override
+  State<_PhoneAppWithAdMob> createState() => _PhoneAppWithAdMobState();
+}
+
+class _PhoneAppWithAdMobState extends State<_PhoneAppWithAdMob> {
+  @override
+  void initState() {
+    super.initState();
+    initAdMob().catchError((e) => debugPrint('AdMob init: $e'));
+    _initNotifications();
+  }
+
+  Future<void> _initNotifications() async {
+    // Request permission after the app is visible — never block runApp.
+    await FirebaseMessaging.instance.requestPermission();
+    await AuthService().refreshFcmToken();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class SilentMorseApp extends StatelessWidget {

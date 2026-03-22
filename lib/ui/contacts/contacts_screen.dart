@@ -6,10 +6,13 @@ import 'package:provider/provider.dart';
 import '../../data/models.dart';
 import '../../services/auth_service.dart';
 import '../../services/chat_repository.dart';
+import '../../services/morse_settings_service.dart';
 import '../../services/purchase_service.dart';
 import '../ads/ad_banner_widget.dart';
 import '../theme/silentmorse_theme.dart';
 import '../chat/chat_screen.dart';
+import '../chat/dark_screen_mode.dart';
+import '../chat/global_dark_screen_mode.dart';
 import '../trainer/trainer_screen.dart';
 import '../test/test_screen.dart';
 import '../settings/settings_screen.dart';
@@ -73,6 +76,102 @@ class _ContactsBodyState extends State<_ContactsBody> {
         _nameCache[otherId] = user?.displayName ?? user?.username ?? 'Contact';
       });
     }
+  }
+
+  void _enterGlobalDark(BuildContext context) {
+    final settings =
+        context.read<MorseSettingsService>().settings;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => GlobalDarkScreenMode(
+        settings: settings,
+        onExit: () => Navigator.of(context).pop(),
+      ),
+    ));
+  }
+
+  SliverAppBar _buildAppBar(BuildContext context) => SliverAppBar(
+        title: Text(
+          'Silent Morse',
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        actions: [
+          // Global dark mode — listen to all friends at once.
+          Tooltip(
+            message: 'Enter silent mode (all friends)',
+            child: IconButton(
+              icon: const Icon(Icons.sensors),
+              color: dotAmber,
+              onPressed: () => _enterGlobalDark(context),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.group_add),
+            onPressed: () => _showCreateGroupSheet(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.person_add),
+            onPressed: () => _showAddSheet(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.school),
+            onPressed: () => _showPracticeMenu(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const SettingsScreen())),
+          ),
+        ],
+      );
+
+  SliverToBoxAdapter _sectionHeader(BuildContext context, String title,
+          {Color? color}) =>
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+          child: Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+              color: color ??
+                  Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+
+  Future<bool> _confirmRemove(BuildContext context, String chatTitle) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove conversation'),
+        content: Text(
+          'Remove "$chatTitle"? This will delete the chat and all messages for both parties.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   void _showAddSheet(BuildContext context) {
@@ -156,78 +255,247 @@ class _ContactsBodyState extends State<_ContactsBody> {
     return StreamBuilder<List<Chat>>(
       stream: repo.observeChats(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return CustomScrollView(
+            slivers: [
+              _buildAppBar(context),
+              SliverFillRemaining(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Text(
+                      'Could not load chats:\n${snapshot.error}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
         final chats = snapshot.data ?? [];
+
+        // Pending requests addressed to me (I must approve/decline).
+        final requests = chats
+            .where((c) => c.isPending && c.requesterId != myUserId)
+            .toList();
+        // Active chats + pending chats I started — split by type.
+        final visible =
+            chats.where((c) => c.isActive || c.requesterId == myUserId).toList();
+
+        // De-duplicate 1-on-1 chats: keep only the most recent chat per partner.
+        final _seenPartner = <String>{};
+        final directChats = visible
+            .where((c) => !c.isGroup)
+            .where((c) {
+              final otherId = c.otherParticipant(myUserId);
+              return _seenPartner.add(otherId); // false = already seen → skip
+            })
+            .toList();
+
+        final groupChats = visible.where((c) => c.isGroup).toList();
+
+        String nameFor(Chat chat) {
+          if (chat.isGroup) return chat.name.isNotEmpty ? chat.name : 'Group';
+          final otherId = chat.otherParticipant(myUserId);
+          _ensureName(chat, myUserId, repo);
+          return _nameCache[otherId] ?? 'Loading…';
+        }
+
+        void goToDark(Chat chat) {
+          if (!chat.isActive) return;
+          final settings =
+              context.read<MorseSettingsService>().settings;
+          final senderName =
+              context.read<MorseSettingsService>().senderDisplayName;
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => DarkScreenMode(
+              chatId: chat.id,
+              settings: settings,
+              onSendMessage: (text) => repo.sendMessage(
+                chat.id,
+                text,
+                senderDisplayName:
+                    senderName.isNotEmpty ? senderName : null,
+              ),
+              onUnsend: () async {
+                final msg = await repo.getLastMyMessage(chat.id);
+                if (msg != null) {
+                  await repo.deleteMessage(chat.id, msg.id);
+                }
+              },
+              onExit: () => Navigator.of(context).pop(),
+            ),
+          ));
+        }
+
+        Widget dismissibleChat(Chat chat, String chatTitle) => Dismissible(
+              key: ValueKey(chat.id),
+              direction: DismissDirection.endToStart,
+              confirmDismiss: (_) => _confirmRemove(context, chatTitle),
+              onDismissed: (_) => repo.deleteChat(chat.id),
+              background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: Icon(
+                  Icons.person_remove,
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+              ),
+              child: _ChatListItem(
+                chat: chat,
+                chatTitle: chatTitle,
+                isGroup: chat.isGroup,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ChatScreen(
+                      chatId: chat.id,
+                      chatTitle: chatTitle,
+                      isGroup: chat.isGroup,
+                    ),
+                  ),
+                ),
+                onLongPress: chat.isActive ? () => goToDark(chat) : null,
+              ),
+            );
+
+        final isEmpty =
+            requests.isEmpty && directChats.isEmpty && groupChats.isEmpty;
 
         return CustomScrollView(
           slivers: [
-            SliverAppBar(
-              title: Text(
-                'Silent Morse',
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface,
+            _buildAppBar(context),
+
+            // ── Loading indicator ──
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                chats.isEmpty)
+              const SliverToBoxAdapter(
+                child: LinearProgressIndicator(),
+              ),
+
+            // ── Incoming chat requests ──
+            if (requests.isNotEmpty) ...[
+              _sectionHeader(context, 'Chat Requests',
+                  color: Theme.of(context).colorScheme.primary),
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final chat = requests[index];
+                    final title = nameFor(chat);
+                    return _ChatRequestItem(
+                      chat: chat,
+                      chatTitle: title,
+                      onAccept: () => repo.approveChat(chat.id),
+                      onDecline: () => repo.declineChat(chat.id),
+                    );
+                  },
+                  childCount: requests.length,
                 ),
               ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.group_add),
-                  onPressed: () => _showCreateGroupSheet(context),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.person_add),
-                  onPressed: () => _showAddSheet(context),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.school),
-                  onPressed: () => _showPracticeMenu(context),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings),
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-                ),
-              ],
-            ),
-            if (chats.isEmpty)
+              const SliverToBoxAdapter(child: Divider(height: 1)),
+            ],
+
+            // ── Empty state ──
+            if (isEmpty)
               SliverFillRemaining(
                 child: _EmptyContactsState(
                   onAddContact: () => _showAddSheet(context),
                 ),
-              )
-            else
+              ),
+
+            // ── Direct messages ──
+            if (directChats.isNotEmpty) ...[
+              _sectionHeader(context, 'Friends'),
               SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final chat = chats[index];
-                    final otherId = chat.otherParticipant(myUserId);
-                    final contactName = _nameCache[otherId] ?? 'Loading...';
-                    _ensureName(chat, myUserId, repo);
-
-                    final chatTitle = chat.isGroup ? (chat.name.isNotEmpty ? chat.name : 'Group') : (_nameCache[otherId] ?? contactName);
-
-                    return _ChatListItem(
-                      chat: chat,
-                      chatTitle: chatTitle,
-                      isGroup: chat.isGroup,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => ChatScreen(
-                              chatId: chat.id,
-                              chatTitle: chatTitle,
-                              isGroup: chat.isGroup,
-                            ),
-                          ),
-                        );
-                      },
-                    );
+                    final chat = directChats[index];
+                    return dismissibleChat(chat, nameFor(chat));
                   },
-                  childCount: chats.length,
+                  childCount: directChats.length,
                 ),
               ),
+            ],
+
+            // ── Groups ──
+            if (groupChats.isNotEmpty) ...[
+              _sectionHeader(context, 'Groups'),
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final chat = groupChats[index];
+                    return dismissibleChat(chat, nameFor(chat));
+                  },
+                  childCount: groupChats.length,
+                ),
+              ),
+            ],
+
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
         );
       },
+    );
+  }
+}
+
+class _ChatRequestItem extends StatelessWidget {
+  final Chat chat;
+  final String chatTitle;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  const _ChatRequestItem({
+    required this.chat,
+    required this.chatTitle,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          _ContactAvatar(name: chatTitle, size: 52),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  chatTitle,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Wants to chat silently with you',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filled(
+            onPressed: onAccept,
+            icon: const Icon(Icons.check),
+            style: IconButton.styleFrom(
+              backgroundColor: dotAmber,
+              foregroundColor: Colors.black,
+            ),
+          ),
+          const SizedBox(width: 4),
+          IconButton.outlined(
+            onPressed: onDecline,
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -237,18 +505,21 @@ class _ChatListItem extends StatelessWidget {
   final String chatTitle;
   final bool isGroup;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const _ChatListItem({
     required this.chat,
     required this.chatTitle,
     this.isGroup = false,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
@@ -276,7 +547,17 @@ class _ChatListItem extends StatelessWidget {
                       ],
                     ],
                   ),
-                  if (chat.lastMessage.isNotEmpty) ...[
+                  if (chat.isPending) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Awaiting approval…',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ] else if (chat.lastMessage.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
                       chat.lastMessage,
@@ -299,6 +580,15 @@ class _ChatListItem extends StatelessWidget {
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
+            if (!isGroup && chat.isActive) ...[
+              const SizedBox(width: 6),
+              Icon(Icons.dark_mode,
+                  size: 14,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withValues(alpha: 0.4)),
+            ],
           ],
         ),
       ),

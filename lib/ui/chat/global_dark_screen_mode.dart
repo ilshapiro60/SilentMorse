@@ -8,47 +8,45 @@ import 'package:screen_brightness/screen_brightness.dart';
 import '../../app.dart';
 import '../../data/models.dart';
 import '../../services/chat_repository.dart';
+import 'package:vibration/vibration.dart';
+
 import '../../util/morse_haptic_engine.dart';
 import '../../util/tap_decoder.dart';
 
-/// DarkScreenMode — The signature Silent Morse feature.
-/// Fills screen with pure black, sets brightness to near-zero,
-/// converts all interaction to haptic/touch Morse.
+/// Global dark-screen mode — listens to ALL active chats simultaneously.
+/// Ilya doesn't need to pick a friend first.
 ///
-/// Gestures:
-///   Short tap        → dot
-///   Long press       → dash
-///   Swipe up         → send current decoded text immediately
-///   Swipe down       → unsend your last sent message
-///   Two-finger touch → exit
-class DarkScreenMode extends StatefulWidget {
-  final String chatId;
+/// Receive: whenever any friend sends a message the morse vibrates.
+/// Reply:   swipe up sends the current morse to whoever messaged most recently.
+/// Unsend:  swipe down deletes Ilya's last sent message (across any chat).
+/// Exit:    two-finger touch.
+class GlobalDarkScreenMode extends StatefulWidget {
   final MorseSettings settings;
-  final void Function(String text) onSendMessage;
-  final VoidCallback onUnsend;
   final VoidCallback onExit;
 
-  const DarkScreenMode({
+  const GlobalDarkScreenMode({
     super.key,
-    required this.chatId,
     required this.settings,
-    required this.onSendMessage,
-    required this.onUnsend,
     required this.onExit,
   });
 
   @override
-  State<DarkScreenMode> createState() => _DarkScreenModeState();
+  State<GlobalDarkScreenMode> createState() => _GlobalDarkScreenModeState();
 }
 
-class _DarkScreenModeState extends State<DarkScreenMode> {
+class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
   late TapDecoder _tapDecoder;
-  StreamSubscription? _incomingSub;
+  StreamSubscription<List<Chat>>? _chatListSub;
+  final Map<String, StreamSubscription<List<Message>>> _chatSubs = {};
+  final Map<String, bool> _chatFirstEvent = {};
+  final Map<String, String?> _chatLastMsgId = {};
   Timer? _silenceTimer;
 
-  bool _showTapFeedback = false;
+  // Who to reply to (the last friend who sent a message).
+  String? _replyToChatId;
+  String _replyToName = '';
   String _lastReceivedText = '';
-  String? _lastIncomingMsgId;
+  bool _showTapFeedback = false;
 
   int _pressStartMs = 0;
   final Set<int> _activePointers = {};
@@ -58,16 +56,18 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   static const double _swipeUpThreshold = 80;
   static const double _swipeDownThreshold = 80;
 
+  // Name cache: chatId → other participant's display name.
+  final Map<String, String> _nameCache = {};
+
   @override
   void initState() {
     super.initState();
     _tapDecoder = TapDecoder(widget.settings);
     _initBrightness();
-    // Mark this chat as the one currently in dark-screen mode so the global
-    // foreground FCM listener skips it (avoid double-vibrate).
-    GlobalReceiveState.activeDarkModeChatId = widget.chatId;
+    // Prevent the per-chat foreground FCM listener from double-vibrating.
+    GlobalReceiveState.activeDarkModeChatId = '__global__';
     WidgetsBinding.instance
-        .addPostFrameCallback((_) => _observeIncomingMessages());
+        .addPostFrameCallback((_) => _startListeningToAllChats());
   }
 
   Future<void> _initBrightness() async {
@@ -76,36 +76,80 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     } catch (_) {}
   }
 
-  void _observeIncomingMessages() {
+  void _startListeningToAllChats() {
     final repo = context.read<ChatRepository>();
     final myUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-    bool firstEvent = true;
 
-    _incomingSub = repo.observeMessages(widget.chatId).listen((messages) {
-      if (messages.isEmpty) return;
-      final last = messages.last;
+    _chatListSub = repo.observeChats().listen((chats) async {
+      final active = chats.where((c) => c.isActive).toList();
+      final activeIds = active.map((c) => c.id).toSet();
 
-      // Skip the initial snapshot — we don't want to replay old messages.
-      if (firstEvent) {
-        firstEvent = false;
-        _lastIncomingMsgId = last.id;
-        return;
+      // Cancel subs for chats no longer active.
+      for (final id in _chatSubs.keys.toList()) {
+        if (!activeIds.contains(id)) {
+          _chatSubs[id]?.cancel();
+          _chatSubs.remove(id);
+          _chatFirstEvent.remove(id);
+          _chatLastMsgId.remove(id);
+        }
       }
 
-      if (last.id == _lastIncomingMsgId) return;
-      if (last.senderId == myUserId) return;
-      if (last.morse.isEmpty) return;
+      // Subscribe to new active chats.
+      for (final chat in active) {
+        if (_chatSubs.containsKey(chat.id)) continue;
+        _chatFirstEvent[chat.id] = true;
 
-      _lastIncomingMsgId = last.id;
-
-      switch (widget.settings.receiveMode) {
-        case ReceiveMode.vibrate:
-          MorseHapticEngine.playMorseString(last.morse, widget.settings);
-          if (mounted) setState(() => _lastReceivedText = '');
-        case ReceiveMode.text:
-          if (last.text.isNotEmpty && mounted) {
-            setState(() => _lastReceivedText = last.text);
+        // Resolve other participant's name upfront.
+        final otherId = chat.otherParticipant(myUserId);
+        if (!_nameCache.containsKey(chat.id) && otherId.isNotEmpty) {
+          final user = await repo.getUserById(otherId);
+          if (mounted) {
+            _nameCache[chat.id] = chat.isGroup
+                ? (chat.name.isNotEmpty ? chat.name : 'Group')
+                : (user?.displayName ?? user?.username ?? 'Friend');
           }
+        }
+
+        _chatSubs[chat.id] =
+            repo.observeMessages(chat.id).listen((messages) async {
+          if (messages.isEmpty) return;
+          final last = messages.last;
+
+          // Skip the initial snapshot.
+          if (_chatFirstEvent[chat.id] == true) {
+            _chatFirstEvent[chat.id] = false;
+            _chatLastMsgId[chat.id] = last.id;
+            return;
+          }
+
+          if (last.id == _chatLastMsgId[chat.id]) return;
+          if (last.senderId == myUserId) return;
+          if (last.morse.isEmpty) return;
+
+          _chatLastMsgId[chat.id] = last.id;
+
+          // Update reply target to the chat that just spoke.
+          if (mounted) {
+            setState(() {
+              _replyToChatId = chat.id;
+              _replyToName = _nameCache[chat.id] ?? 'Friend';
+              _lastReceivedText =
+                  widget.settings.receiveMode == ReceiveMode.text
+                      ? last.text
+                      : '';
+            });
+          }
+
+          if (widget.settings.receiveMode == ReceiveMode.vibrate) {
+            // Group messages get a short alert buzz first so Ilya can
+            // feel the difference between a 1-on-1 and a group message.
+            if (chat.isGroup) {
+              await Vibration.vibrate(duration: 80);
+              await Future.delayed(const Duration(milliseconds: 120));
+            }
+            MorseHapticEngine.playMorseString(last.morse, widget.settings);
+          }
+        });
       }
     });
   }
@@ -113,7 +157,10 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   @override
   void dispose() {
     _tapDecoder.dispose();
-    _incomingSub?.cancel();
+    _chatListSub?.cancel();
+    for (final sub in _chatSubs.values) {
+      sub.cancel();
+    }
     _silenceTimer?.cancel();
     _resetBrightness();
     GlobalReceiveState.activeDarkModeChatId = null;
@@ -126,7 +173,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     } catch (_) {}
   }
 
-  // --- Silence timer ---
+  // ── Silence timer ────────────────────────────────────────────────────────
 
   void _resetSilenceTimer() {
     final delayMs = widget.settings.autoSendDelayMs;
@@ -137,12 +184,19 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
 
   void _autoSend() {
     final text = _tapDecoder.consumeText();
-    if (text.isNotEmpty) {
-      widget.onSendMessage(text);
+    if (text.isNotEmpty && _replyToChatId != null) {
+      _sendMessage(text);
     }
   }
 
-  // --- Pointer handling ---
+  void _sendMessage(String text) {
+    final chatId = _replyToChatId;
+    if (chatId == null) return;
+    final repo = context.read<ChatRepository>();
+    repo.sendMessage(chatId, text);
+  }
+
+  // ── Pointer handling ─────────────────────────────────────────────────────
 
   void _handlePointerDown(PointerDownEvent event) {
     _activePointers.add(event.pointer);
@@ -182,16 +236,15 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
       // Swipe up → send immediately.
       _silenceTimer?.cancel();
       final text = _tapDecoder.consumeText();
-      if (text.isNotEmpty) {
-        widget.onSendMessage(text);
+      if (text.isNotEmpty && _replyToChatId != null) {
+        _sendMessage(text);
       }
     } else if (dy > _swipeDownThreshold) {
-      // Swipe down → unsend last message.
+      // Swipe down → unsend last sent message across all chats.
       _tapDecoder.reset();
       _silenceTimer?.cancel();
-      widget.onUnsend();
+      await _unsendLast();
     } else {
-      // Normal tap/press → record as dot or dash, then reset silence timer.
       _tapDecoder.onPressUp();
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
@@ -206,8 +259,25 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     }
   }
 
+  Future<void> _unsendLast() async {
+    final repo = context.read<ChatRepository>();
+    // Try the active reply chat first, then fall back to any chat.
+    final chatIds = _replyToChatId != null
+        ? [_replyToChatId!, ..._chatSubs.keys.where((id) => id != _replyToChatId)]
+        : _chatSubs.keys.toList();
+    for (final chatId in chatIds) {
+      final msg = await repo.getLastMyMessage(chatId);
+      if (msg != null) {
+        await repo.deleteMessage(chatId, msg.id);
+        return;
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hasReplyTarget = _replyToChatId != null;
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Listener(
@@ -242,25 +312,22 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
+                            // Last received message (text mode).
                             if (_lastReceivedText.isNotEmpty) ...[
-                              const Text(
-                                'Incoming',
-                                style: TextStyle(
-                                    color: Color(0xFF333333), fontSize: 11),
-                              ),
-                              const SizedBox(height: 4),
                               Padding(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 32),
                                 child: Text(
                                   _lastReceivedText,
                                   style: const TextStyle(
-                                      color: Color(0xFF222222), fontSize: 12),
+                                      color: Color(0xFF222222),
+                                      fontSize: 12),
                                   textAlign: TextAlign.center,
                                 ),
                               ),
                               const SizedBox(height: 24),
                             ],
+                            // Tap indicator dot.
                             Container(
                               width: 12,
                               height: 12,
@@ -290,14 +357,16 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
                                 child: Text(
                                   decodedText,
                                   style: const TextStyle(
-                                      color: Color(0xFF0A0A0A), fontSize: 16),
+                                      color: Color(0xFF0A0A0A),
+                                      fontSize: 16),
                                   textAlign: TextAlign.center,
                                 ),
                               ),
                           ],
                         ),
                       ),
-                      const Positioned(
+                      // Bottom hint.
+                      Positioned(
                         left: 16,
                         right: 16,
                         bottom: 24,
@@ -305,17 +374,36 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                'Tap = dot • Hold = dash • Swipe ↑ = send • Swipe ↓ = unsend',
+                              if (hasReplyTarget)
+                                Text(
+                                  'Replying to $_replyToName',
+                                  style: const TextStyle(
+                                      color: Color(0xFF2A2A2A),
+                                      fontSize: 11),
+                                  textAlign: TextAlign.center,
+                                )
+                              else
+                                const Text(
+                                  'Waiting for any friend…',
+                                  style: TextStyle(
+                                      color: Color(0xFF2A2A2A),
+                                      fontSize: 11),
+                                  textAlign: TextAlign.center,
+                                ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Tap • Hold = dash • Swipe ↑ = send • Swipe ↓ = unsend',
                                 style: TextStyle(
-                                    color: Color(0xFF333333), fontSize: 11),
+                                    color: Color(0xFF222222),
+                                    fontSize: 10),
                                 textAlign: TextAlign.center,
                               ),
-                              SizedBox(height: 4),
-                              Text(
+                              const SizedBox(height: 2),
+                              const Text(
                                 'Two fingers = exit',
                                 style: TextStyle(
-                                    color: Color(0xFF333333), fontSize: 11),
+                                    color: Color(0xFF222222),
+                                    fontSize: 10),
                                 textAlign: TextAlign.center,
                               ),
                             ],

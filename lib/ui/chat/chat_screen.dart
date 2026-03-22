@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -26,6 +27,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _inputController = TextEditingController();
   bool _isDarkScreenActive = false;
+  DateTime? _clearedAt;
 
   @override
   void dispose() {
@@ -45,7 +47,15 @@ class _ChatScreenState extends State<ChatScreen> {
         chatId: widget.chatId,
         settings: settings,
         onSendMessage: (text) {
-          repo.sendMessage(widget.chatId, text, senderDisplayName: senderName.isNotEmpty ? senderName : null);
+          repo.sendMessage(widget.chatId, text,
+              senderDisplayName:
+                  senderName.isNotEmpty ? senderName : null);
+        },
+        onUnsend: () async {
+          final msg = await repo.getLastMyMessage(widget.chatId);
+          if (msg != null) {
+            await repo.deleteMessage(widget.chatId, msg.id);
+          }
         },
         onExit: () => setState(() => _isDarkScreenActive = false),
       );
@@ -65,6 +75,11 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.cleaning_services_outlined),
+            tooltip: 'Clear screen',
+            onPressed: () => setState(() => _clearedAt = DateTime.now()),
+          ),
           Tooltip(
             message: 'Dark mode: tap = dot, long press = dash, swipe up = send, two fingers = exit',
             child: IconButton(
@@ -74,48 +89,107 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: StreamBuilder<List<models.Message>>(
-              stream: repo.observeMessages(widget.chatId),
-              builder: (context, snapshot) {
-                final messages = snapshot.data ?? [];
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('chats')
+            .doc(widget.chatId)
+            .snapshots(),
+        builder: (context, chatSnap) {
+          final chatData = chatSnap.data?.data() as Map<String, dynamic>? ?? {};
+          final status = models.ChatStatus.fromString(chatData['status'] as String?);
+          final requesterId = chatData['requesterId'] as String? ?? '';
+          final isPending = status == models.ChatStatus.pending;
+          final iAmRequester = requesterId == myUserId;
+          final canSend = !isPending;
 
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: messages.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == messages.length) {
-                      return const SizedBox(height: 8);
-                    }
-                    final message = messages[index];
-                    final isFromMe = message.senderId == myUserId;
+          return Column(
+            children: [
+              if (isPending)
+                Container(
+                  width: double.infinity,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    children: [
+                      Icon(Icons.hourglass_top, size: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          iAmRequester
+                              ? 'Waiting for ${widget.chatTitle} to accept your chat request…'
+                              : '${widget.chatTitle} wants to chat with you',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      if (!iAmRequester) ...[
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () => repo.approveChat(widget.chatId),
+                          child: const Text('Accept'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            repo.declineChat(widget.chatId);
+                            Navigator.of(context).pop();
+                          },
+                          child: Text('Decline',
+                              style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: StreamBuilder<List<models.Message>>(
+                  stream: repo.observeMessages(widget.chatId),
+                  builder: (context, snapshot) {
+                    final clearedAt = _clearedAt;
+                    final messages = (snapshot.data ?? [])
+                        .where((m) => clearedAt == null ||
+                            (m.sentAt != null && m.sentAt!.isAfter(clearedAt)))
+                        .toList();
 
-                    return _MessageBubble(
-                      message: message,
-                      isFromMe: isFromMe,
-                      showSenderName: widget.isGroup && !isFromMe,
-                      repo: repo,
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      itemCount: messages.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == messages.length) {
+                          return const SizedBox(height: 8);
+                        }
+                        final message = messages[index];
+                        final isFromMe = message.senderId == myUserId;
+
+                        return _MessageBubble(
+                          message: message,
+                          isFromMe: isFromMe,
+                          showSenderName: widget.isGroup && !isFromMe,
+                          repo: repo,
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
-          ),
-          _ChatInputBar(
-            controller: _inputController,
-            onSend: () {
-              final text = _inputController.text.trim();
-              if (text.isNotEmpty) {
-                final senderName = context.read<MorseSettingsService>().senderDisplayName;
-                repo.sendMessage(widget.chatId, text, senderDisplayName: senderName.isNotEmpty ? senderName : null);
-                _inputController.clear();
-              }
-            },
-            onDarkMode: () => setState(() => _isDarkScreenActive = true),
-          ),
-        ],
+                ),
+              ),
+              _ChatInputBar(
+                controller: _inputController,
+                enabled: canSend,
+                onSend: canSend ? () {
+                  final text = _inputController.text.trim();
+                  if (text.isNotEmpty) {
+                    final senderName = context.read<MorseSettingsService>().senderDisplayName;
+                    repo.sendMessage(widget.chatId, text, senderDisplayName: senderName.isNotEmpty ? senderName : null);
+                    _inputController.clear();
+                  }
+                } : null,
+                onDarkMode: canSend ? () => setState(() => _isDarkScreenActive = true) : null,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -241,13 +315,15 @@ class _MessageBubble extends StatelessWidget {
 
 class _ChatInputBar extends StatelessWidget {
   final TextEditingController controller;
-  final VoidCallback onSend;
-  final VoidCallback onDarkMode;
+  final VoidCallback? onSend;
+  final VoidCallback? onDarkMode;
+  final bool enabled;
 
   const _ChatInputBar({
     required this.controller,
     required this.onSend,
     required this.onDarkMode,
+    this.enabled = true,
   });
 
   @override
@@ -269,20 +345,26 @@ class _ChatInputBar extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: controller,
+                  enabled: enabled,
                   maxLines: 4,
+                  minLines: 1,
+                  textInputAction: TextInputAction.send,
                   decoration: InputDecoration(
-                    hintText: 'Type a message...',
+                    hintText: enabled ? 'Type a message...' : 'Chat not yet approved',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
-                  onSubmitted: (_) => onSend(),
+                  onSubmitted: enabled ? (_) => onSend?.call() : null,
                 ),
               ),
               const SizedBox(width: 8),
               FloatingActionButton.small(
-                onPressed: onSend,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                child: const Icon(Icons.send, color: Colors.white),
+                onPressed: enabled ? onSend : null,
+                backgroundColor: enabled
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Icon(Icons.send,
+                    color: enabled ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ],
           ),

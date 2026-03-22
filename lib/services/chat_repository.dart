@@ -14,6 +14,11 @@ abstract class ChatRepository {
   Future<String> getOrCreateChat(String targetUserId);
   Future<String> createGroupChat(String name, List<String> participantIds);
   Future<void> sendMessage(String chatId, String text, {InputMode inputMode = InputMode.typed, String? senderDisplayName});
+  Future<void> approveChat(String chatId);
+  Future<void> declineChat(String chatId);
+  Future<void> deleteChat(String chatId);
+  Future<void> deleteMessage(String chatId, String messageId);
+  Future<Message?> getLastMyMessage(String chatId);
   Future<void> addContact(User user);
   Stream<List<Contact>> observeContacts();
   Future<User?> findUserByUsername(String username);
@@ -36,9 +41,22 @@ class FirestoreChatRepository extends ChatRepository {
     return _firestore
         .collection('chats')
         .where('participants', arrayContains: _myUserId)
-        .orderBy('lastMessageAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((d) => Chat.fromFirestore(d)).toList());
+        .map((snapshot) {
+          final chats =
+              snapshot.docs.map((d) => Chat.fromFirestore(d)).toList();
+          // Sort newest-first client-side to avoid a composite index requirement
+          // and to handle chats where lastMessageAt is null.
+          chats.sort((a, b) {
+            final ta = a.lastMessageAt;
+            final tb = b.lastMessageAt;
+            if (ta == null && tb == null) return 0;
+            if (ta == null) return 1;
+            if (tb == null) return -1;
+            return tb.compareTo(ta);
+          });
+          return chats;
+        });
   }
 
   // ─────────────────────────────────────────────
@@ -60,6 +78,9 @@ class FirestoreChatRepository extends ChatRepository {
     final docRef = await _firestore.collection('chats').add({
       'participants': allParticipants,
       'name': name.trim().isEmpty ? 'Group' : name.trim(),
+      'isGroup': true,
+      'status': 'ACTIVE',
+      'requesterId': '',
       'lastMessage': '',
       'lastMessageBy': '',
       'lastMessageAt': FieldValue.serverTimestamp(),
@@ -104,6 +125,69 @@ class FirestoreChatRepository extends ChatRepository {
       'lastMessageBy': _myUserId,
       'lastMessageAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  @override
+  Future<void> approveChat(String chatId) async {
+    await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .update({'status': 'ACTIVE'});
+  }
+
+  @override
+  Future<void> declineChat(String chatId) async {
+    await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .update({'status': 'DECLINED'});
+  }
+
+  @override
+  Future<void> deleteChat(String chatId) async {
+    // Delete all messages in batches of 500, then delete the chat document.
+    const batchSize = 500;
+    final messagesRef = _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages');
+    QuerySnapshot snapshot;
+    do {
+      snapshot = await messagesRef.limit(batchSize).get();
+      if (snapshot.docs.isNotEmpty) {
+        final batch = _firestore.batch();
+        for (final doc in snapshot.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    } while (snapshot.docs.length == batchSize);
+
+    await _firestore.collection('chats').doc(chatId).delete();
+  }
+
+  @override
+  Future<void> deleteMessage(String chatId, String messageId) async {
+    await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .doc(messageId)
+        .delete();
+  }
+
+  @override
+  Future<Message?> getLastMyMessage(String chatId) async {
+    final snapshot = await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .where('senderId', isEqualTo: _myUserId)
+        .orderBy('sentAt', descending: true)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) return null;
+    return Message.fromFirestore(snapshot.docs.first);
   }
 
   Future<void> markAsRead(String chatId, String messageId) async {

@@ -42,7 +42,7 @@ class _LegalScreenState extends State<LegalScreen> with SingleTickerProviderStat
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [
+        children: const [
           _LegalContent(assetPath: 'assets/legal/terms_of_service.txt'),
           _LegalContent(assetPath: 'assets/legal/privacy_policy.txt'),
         ],

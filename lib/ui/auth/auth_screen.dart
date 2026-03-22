@@ -254,25 +254,25 @@ class _ChooseMethodStep extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: FilledButton(
-            onPressed: isLoading ? null : onAppleSignIn,
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.apple, color: Colors.white, size: 22),
-                SizedBox(width: 12),
-                Text('Continue with Apple'),
-              ],
+            width: double.infinity,
+            height: 52,
+            child: FilledButton(
+              onPressed: isLoading ? null : onAppleSignIn,
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.apple, color: Colors.white, size: 22),
+                  SizedBox(width: 12),
+                  Text('Continue with Apple'),
+                ],
+              ),
             ),
           ),
-        ),
         const SizedBox(height: 24),
         GestureDetector(
           onTap: () => Navigator.of(context).push(

@@ -211,6 +211,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
               )),
               const SizedBox(height: 32),
               const Text(
+                'Auto-send delay',
+                style: TextStyle(
+                  color: dotAmber,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Seconds of silence before the message is sent automatically.'
+                ' Set to 0 to disable auto-send.',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('0 s', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  Expanded(
+                    child: Slider(
+                      value: service.autoSendDelayMs / 1000,
+                      min: 0,
+                      max: 10,
+                      divisions: 10,
+                      activeColor: dotAmber,
+                      inactiveColor: inkSurfaceVariant,
+                      label: service.autoSendDelayMs == 0
+                          ? 'off'
+                          : '${(service.autoSendDelayMs / 1000).toStringAsFixed(0)} s',
+                      onChanged: (v) =>
+                          service.setAutoSendDelayMs((v * 1000).round()),
+                    ),
+                  ),
+                  Text(
+                    service.autoSendDelayMs == 0
+                        ? 'off'
+                        : '${(service.autoSendDelayMs / 1000).toStringAsFixed(0)} s',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              const Text(
                 'Dark mode gestures',
                 style: TextStyle(
                   color: dotAmber,
@@ -221,7 +264,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Short tap = dot • Long press = dash • Swipe up = send • Two fingers = exit',
+                'Short tap = dot • Long press = dash'
+                ' • Swipe up = send now'
+                ' • Swipe down = unsend last'
+                ' • Two fingers = exit',
                 style: TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ],
@@ -390,11 +436,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: dotAmber.withValues(alpha: 0.5)),
         ),
-        child: Row(
+        child: const Row(
           children: [
             Icon(Icons.check_circle, color: dotAmber, size: 28),
-            const SizedBox(width: 12),
-            const Expanded(
+            SizedBox(width: 12),
+            Expanded(
               child: Text(
                 'Ad-free • Thanks for your support!',
                 style: TextStyle(

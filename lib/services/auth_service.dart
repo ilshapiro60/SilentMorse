@@ -4,11 +4,15 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import '../apple_signin_config.dart';
 import '../firebase_options.dart';
+import '../util/platform_utils.dart';
 
 String _sha256ofString(String input) {
   final bytes = utf8.encode(input);
@@ -47,12 +51,27 @@ class AuthService {
     final rawNonce = _generateNonce();
     final nonceHash = _sha256ofString(rawNonce);
 
+    WebAuthenticationOptions? webOpts;
+    if (isAndroid) {
+      if (appleSignInClientId.isEmpty || appleSignInRedirectUri.isEmpty) {
+        throw StateError(
+          'Apple Sign-In on Android requires setup. '
+          'See APPLE_SIGNIN_SETUP.md and add clientId/redirectUri to lib/apple_signin_config.dart',
+        );
+      }
+      webOpts = WebAuthenticationOptions(
+        clientId: appleSignInClientId,
+        redirectUri: Uri.parse(appleSignInRedirectUri),
+      );
+    }
+
     final appleCredential = await SignInWithApple.getAppleIDCredential(
       scopes: [
         AppleIDAuthorizationScopes.email,
         AppleIDAuthorizationScopes.fullName,
       ],
       nonce: nonceHash,
+      webAuthenticationOptions: webOpts,
     );
 
     final oauthCredential = firebase_auth.OAuthProvider('apple.com').credential(
@@ -161,6 +180,31 @@ class AuthService {
 
   Future<void> claimUsername(String username) async {
     await _functions.httpsCallable('claimUsername').call({'username': username});
+  }
+
+  /// Fetch the current FCM token and persist it to Firestore.
+  /// Call this after sign-in and whenever the token refreshes.
+  Future<void> refreshFcmToken() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null && token.isNotEmpty) {
+        await _firestore
+            .collection('users')
+            .doc(uid)
+            .update({'fcmToken': token});
+      }
+      // Keep token up-to-date if it rotates.
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+        _firestore
+            .collection('users')
+            .doc(uid)
+            .update({'fcmToken': newToken});
+      });
+    } catch (e) {
+      debugPrint('FCM token refresh error: $e');
+    }
   }
 
   Future<void> signOut() async {

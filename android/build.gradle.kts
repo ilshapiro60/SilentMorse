@@ -1,3 +1,6 @@
+import com.android.build.gradle.LibraryExtension
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 allprojects {
     repositories {
         google()
@@ -17,6 +20,29 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+}
+// Fix wear plugin: AGP 8+ requires namespace; align JVM targets
+subprojects {
+    pluginManager.withPlugin("com.android.library") {
+        if (project.name == "wear") {
+            project.extensions.configure<LibraryExtension> {
+                namespace = "com.mjohnsullivan.flutterwear.wear"
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_17
+                    targetCompatibility = JavaVersion.VERSION_17
+                }
+            }
+        }
+    }
+    pluginManager.withPlugin("org.jetbrains.kotlin.android") {
+        if (project.name == "wear") {
+            project.extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension> {
+                compilerOptions {
+                    jvmTarget.set(JvmTarget.JVM_17)
+                }
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {

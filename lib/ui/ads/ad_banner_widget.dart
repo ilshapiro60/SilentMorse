@@ -39,8 +39,10 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
   }
 
   void _loadAd() {
+    final unitId = bannerAdUnitId;
+    if (unitId.isEmpty) return; // No prod ID configured — skip silently.
     _bannerAd = BannerAd(
-      adUnitId: bannerAdUnitId,
+      adUnitId: unitId,
       size: AdSize.banner,
       request: const AdRequest(),
       listener: BannerAdListener(

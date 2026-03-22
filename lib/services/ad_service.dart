@@ -18,11 +18,20 @@ Future<void> initAdMob() async {
   await MobileAds.instance.initialize();
 }
 
-/// Returns the banner ad unit ID for the current platform.
+/// Returns the banner ad unit ID for the current platform, or empty string
+/// if no production ID is configured for this platform (ads will be hidden).
 String get bannerAdUnitId {
-  final useProd = !kDebugMode && _androidProdBannerId.isNotEmpty && _iosProdBannerId.isNotEmpty;
-  if (useProd) {
-    return Platform.isAndroid ? _androidProdBannerId : _iosProdBannerId;
+  if (!kDebugMode) {
+    // Release build — only show ads if a real prod ID is configured.
+    if (Platform.isAndroid && _androidProdBannerId.isNotEmpty) {
+      return _androidProdBannerId;
+    }
+    if (!Platform.isAndroid && _iosProdBannerId.isNotEmpty) {
+      return _iosProdBannerId;
+    }
+    // No prod ID configured — return empty to suppress ads cleanly.
+    return '';
   }
+  // Debug build — use test IDs.
   return Platform.isAndroid ? _androidTestBannerId : _iosTestBannerId;
 }
