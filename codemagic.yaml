@@ -1,0 +1,30 @@
+workflows:
+  ios-app-store:
+    name: iOS App Store Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: SilentMorse   # matches the key name in Developer Portal integration
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.silentmorse.messenger
+      flutter: stable
+      xcode: latest
+    scripts:
+      - name: Set up code signing
+        script: xcode-project use-profiles
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: true
