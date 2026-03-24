@@ -15,11 +15,11 @@ import 'services/chat_repository.dart' show ChatRepository, FirestoreChatReposit
 import 'services/morse_settings_service.dart';
 import 'services/purchase_service.dart';
 
-/// On iOS, Firebase is auto-configured from GoogleService-Info.plist during
-/// plugin registration. Passing explicit [FirebaseOptions] triggers a second
-/// native `[FIRApp configureWithName:options:]` which throws an uncatchable
-/// NSException → SIGABRT.  Only Android needs the Dart-side options.
-Future<void> _initFirebaseSafe() async {
+/// Initialise Firebase.  On iOS the native SDK auto-configures from
+/// GoogleService-Info.plist during plugin registration, so we must NOT pass
+/// explicit [FirebaseOptions] (that triggers a second native configure →
+/// uncatchable NSException → SIGABRT).  Android needs the Dart-side options.
+Future<void> _initFirebase() async {
   try {
     if (Platform.isIOS) {
       await Firebase.initializeApp();
@@ -27,15 +27,20 @@ Future<void> _initFirebaseSafe() async {
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     }
   } catch (e) {
-    debugPrint('Firebase init error (safe to ignore on iOS): $e');
+    debugPrint('Firebase init: $e');
   }
 }
 
 /// Top-level background message handler — runs in a separate isolate.
-/// Only a single alert buzz; the full morse pattern plays in the foreground.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await _initFirebaseSafe();
+  try {
+    if (Platform.isIOS) {
+      await Firebase.initializeApp();
+    } else {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    }
+  } catch (_) {}
   if (message.data['type'] == 'message') {
     try {
       await Vibration.vibrate(duration: 400);
@@ -43,9 +48,19 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
+late final Future<void> _firebaseReady;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await _initFirebaseSafe();
+
+  // Start Firebase init but do NOT await — runApp must be called immediately
+  // so the user sees UI.  A 10-second timeout prevents an infinite hang on iOS
+  // if the method-channel call never returns.
+  _firebaseReady = _initFirebase().timeout(
+    const Duration(seconds: 10),
+    onTimeout: () => debugPrint('Firebase init timed out after 10 s'),
+  );
+
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   runApp(const _SilentMorseAppLoader());
 }
@@ -58,13 +73,34 @@ class _SilentMorseAppLoader extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWatch = constraints.maxWidth < 500 && constraints.maxHeight < 500;
-          if (isWatch) {
-            return const WatchApp();
+      home: FutureBuilder<void>(
+        future: _firebaseReady,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.amber),
+                    SizedBox(height: 16),
+                    Text(
+                      'Starting Silent Morse…',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
-          return const _PhoneAppWithAdMob(child: SilentMorseApp());
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final isWatch =
+                  constraints.maxWidth < 500 && constraints.maxHeight < 500;
+              if (isWatch) return const WatchApp();
+              return const _PhoneAppWithAdMob(child: SilentMorseApp());
+            },
+          );
         },
       ),
     );
