@@ -40,6 +40,7 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
   final Map<String, StreamSubscription<List<Message>>> _chatSubs = {};
   final Map<String, bool> _chatFirstEvent = {};
   final Map<String, String?> _chatLastMsgId = {};
+  final Map<String, int> _chatPrevCount = {};
   Timer? _silenceTimer;
 
   // Who to reply to (the last friend who sent a message).
@@ -91,6 +92,7 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
           _chatSubs.remove(id);
           _chatFirstEvent.remove(id);
           _chatLastMsgId.remove(id);
+          _chatPrevCount.remove(id);
         }
       }
 
@@ -112,17 +114,35 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
 
         _chatSubs[chat.id] =
             repo.observeMessages(chat.id).listen((messages) async {
-          if (messages.isEmpty) return;
+          if (messages.isEmpty) {
+            _chatPrevCount[chat.id] = 0;
+            return;
+          }
           final last = messages.last;
 
           // Skip the initial snapshot.
           if (_chatFirstEvent[chat.id] == true) {
             _chatFirstEvent[chat.id] = false;
             _chatLastMsgId[chat.id] = last.id;
+            _chatPrevCount[chat.id] = messages.length;
             return;
           }
 
-          if (last.id == _chatLastMsgId[chat.id]) return;
+          if (last.id == _chatLastMsgId[chat.id]) {
+            _chatPrevCount[chat.id] = messages.length;
+            return;
+          }
+
+          final prevLen = _chatPrevCount[chat.id] ?? 0;
+          if (messages.length < prevLen &&
+              last.id != _chatLastMsgId[chat.id]) {
+            _chatLastMsgId[chat.id] = last.id;
+            _chatPrevCount[chat.id] = messages.length;
+            return;
+          }
+
+          _chatPrevCount[chat.id] = messages.length;
+
           if (last.senderId == myUserId) return;
           if (last.morse.isEmpty) return;
 
@@ -291,82 +311,58 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
             stream: _tapDecoder.decodedText,
             initialData: '',
             builder: (context, decodedSnapshot) {
-              return StreamBuilder<String>(
-                stream: _tapDecoder.currentMorse,
-                initialData: '',
-                builder: (context, morseSnapshot) {
-                  final decodedText = decodedSnapshot.data ?? '';
-                  final currentMorse = morseSnapshot.data ?? '';
+              final decodedText = decodedSnapshot.data ?? '';
+              final sendMode = widget.settings.sendMode;
+              final showText =
+                  sendMode == SendMode.text && decodedText.isNotEmpty;
 
-                  final sendMode = widget.settings.sendMode;
-                  final showMorse = sendMode == SendMode.touchWithText &&
-                      currentMorse.isNotEmpty;
-                  final showText =
-                      (sendMode == SendMode.text ||
-                          sendMode == SendMode.touchWithText) &&
-                      decodedText.isNotEmpty;
-
-                  return Stack(
-                    children: [
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // Last received message (text mode).
-                            if (_lastReceivedText.isNotEmpty) ...[
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 32),
-                                child: Text(
-                                  _lastReceivedText,
-                                  style: const TextStyle(
-                                      color: Color(0xFF222222),
-                                      fontSize: 12),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                            ],
-                            // Tap indicator dot.
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: _showTapFeedback
-                                    ? const Color(0xFF222222)
-                                    : Colors.black,
-                                shape: BoxShape.circle,
-                              ),
+              return Stack(
+                children: [
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (_lastReceivedText.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32),
+                            child: Text(
+                              _lastReceivedText,
+                              style: const TextStyle(
+                                  color: Color(0xFF222222),
+                                  fontSize: 12),
+                              textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 32),
-                            if (showMorse)
-                              Text(
-                                currentMorse,
-                                style: const TextStyle(
-                                  color: Color(0xFF111111),
-                                  fontSize: 24,
-                                  fontFamily: 'monospace',
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            if (showMorse) const SizedBox(height: 16),
-                            if (showText)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 32),
-                                child: Text(
-                                  decodedText,
-                                  style: const TextStyle(
-                                      color: Color(0xFF0A0A0A),
-                                      fontSize: 16),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                          ],
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: _showTapFeedback
+                                ? const Color(0xFF222222)
+                                : Colors.black,
+                            shape: BoxShape.circle,
+                          ),
                         ),
-                      ),
-                      // Bottom hint.
-                      Positioned(
+                        const SizedBox(height: 32),
+                        if (showText)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32),
+                            child: Text(
+                              decodedText,
+                              style: const TextStyle(
+                                  color: Color(0xFF0A0A0A),
+                                  fontSize: 16),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
                         left: 16,
                         right: 16,
                         bottom: 24,
@@ -412,8 +408,6 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
                       ),
                     ],
                   );
-                },
-              );
             },
           ),
         ),

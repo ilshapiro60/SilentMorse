@@ -11,7 +11,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../apple_signin_config.dart';
-import '../firebase_options.dart';
 import '../util/platform_utils.dart';
 
 String _sha256ofString(String input) {
@@ -147,6 +146,7 @@ class AuthService {
         'username': '',
         'phoneHash': '',
         'fcmToken': '',
+        'receiveIncoming': true,
         'isPro': false,
         'createdAt': FieldValue.serverTimestamp(),
         'lastSeen': FieldValue.serverTimestamp(),
@@ -206,6 +206,19 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    final uid = _auth.currentUser?.uid;
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (e) {
+      debugPrint('FCM deleteToken: $e');
+    }
+    if (uid != null) {
+      try {
+        await _firestore.collection('users').doc(uid).update({'fcmToken': ''});
+      } catch (e) {
+        debugPrint('Clear fcmToken on signOut: $e');
+      }
+    }
     await _googleSignIn.signOut();
     await _auth.signOut();
   }

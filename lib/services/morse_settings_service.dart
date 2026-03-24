@@ -21,7 +21,7 @@ class MorseSettingsService extends ChangeNotifier {
   ReceiveMode _receiveMode = ReceiveMode.vibrate;
   ReceiveMode get receiveMode => _receiveMode;
 
-  SendMode _sendMode = SendMode.touchWithText;
+  SendMode _sendMode = SendMode.text;
   SendMode get sendMode => _sendMode;
 
   String _senderDisplayName = '';

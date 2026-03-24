@@ -65,7 +65,7 @@ class MorseSettings {
     this.wordGapMs = 1400,
     this.vibrationIntensity = VibrationIntensity.medium,
     this.receiveMode = ReceiveMode.vibrate,
-    this.sendMode = SendMode.touchWithText,
+    this.sendMode = SendMode.text,
     this.autoSendDelayMs = 3000,
   });
 
@@ -73,7 +73,7 @@ class MorseSettings {
     if (map == null || map is! Map) return MorseSettings();
     final intensity = map['vibrationIntensity']?.toString() ?? 'MEDIUM';
     final receive = map['receiveMode']?.toString() ?? 'VIBRATE';
-    final send = map['sendMode']?.toString() ?? 'TOUCHWITHTEXT';
+    final send = map['sendMode']?.toString() ?? 'TEXT';
     return MorseSettings(
       dotDurationMs: map['dotDurationMs'] ?? 100,
       dashDurationMs: map['dashDurationMs'] ?? 300,
@@ -115,15 +115,15 @@ enum ReceiveMode {
 /// How to send in dark mode (touch input display).
 enum SendMode {
   touch,
-  text,
-  touchWithText;
+  text;
 
   static SendMode fromString(String s) {
     switch (s.toUpperCase()) {
       case 'TEXT':
         return SendMode.text;
       case 'TOUCHWITHTEXT':
-        return SendMode.touchWithText;
+      case 'TOUCH_WITH_TEXT':
+        return SendMode.text;
       default:
         return SendMode.touch;
     }

@@ -8,6 +8,10 @@ import '../../services/chat_repository.dart';
 import '../../services/morse_settings_service.dart';
 import 'dark_screen_mode.dart';
 
+/// Broom "clear screen" time per chat for this app launch only. Survives
+/// leaving and re-opening the chat; cleared when the process exits.
+final Map<String, DateTime> _chatBroomClearedAt = {};
+
 class ChatScreen extends StatefulWidget {
   final String chatId;
   final String chatTitle;
@@ -28,6 +32,12 @@ class _ChatScreenState extends State<ChatScreen> {
   final _inputController = TextEditingController();
   bool _isDarkScreenActive = false;
   DateTime? _clearedAt;
+
+  @override
+  void initState() {
+    super.initState();
+    _clearedAt = _chatBroomClearedAt[widget.chatId];
+  }
 
   @override
   void dispose() {
@@ -78,7 +88,11 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.cleaning_services_outlined),
             tooltip: 'Clear screen',
-            onPressed: () => setState(() => _clearedAt = DateTime.now()),
+            onPressed: () {
+              final now = DateTime.now();
+              _chatBroomClearedAt[widget.chatId] = now;
+              setState(() => _clearedAt = now);
+            },
           ),
           Tooltip(
             message: 'Dark mode: tap = dot, long press = dash, swipe up = send, two fingers = exit',
@@ -183,7 +197,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     _inputController.clear();
                   }
                 } : null,
-                onDarkMode: canSend ? () => setState(() => _isDarkScreenActive = true) : null,
               ),
             ],
           );
@@ -314,13 +327,11 @@ class _MessageBubble extends StatelessWidget {
 class _ChatInputBar extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback? onSend;
-  final VoidCallback? onDarkMode;
   final bool enabled;
 
   const _ChatInputBar({
     required this.controller,
     required this.onSend,
-    required this.onDarkMode,
     this.enabled = true,
   });
 
@@ -333,13 +344,6 @@ class _ChatInputBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             children: [
-              Tooltip(
-                message: 'Dark mode: tap = dot, long press = dash, swipe up = send, two fingers = exit',
-                child: IconButton(
-                  icon: Icon(Icons.dark_mode, color: Theme.of(context).colorScheme.primary),
-                  onPressed: onDarkMode,
-                ),
-              ),
               Expanded(
                 child: TextField(
                   controller: controller,

@@ -1,11 +1,14 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:vibration/vibration.dart';
 
 import 'app.dart';
+import 'data/models.dart';
 import 'firebase_options.dart';
+import 'util/morse_haptic_engine.dart';
 import 'ui/watch/watch_app.dart';
 import 'services/ad_service.dart';
 import 'services/auth_service.dart';
@@ -27,11 +30,28 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (_) {}
-  if (message.data['type'] == 'message') {
-    try {
-      await Vibration.vibrate(duration: 400);
-    } catch (_) {}
+  if (message.data['type'] != 'message') return;
+
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return;
+
+  MorseSettings settings;
+  try {
+    final doc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final data = doc.data();
+    if (data?['receiveIncoming'] == false) return;
+    settings = MorseSettings.fromMap(data?['morseSettings']);
+  } catch (_) {
+    settings = MorseSettings();
   }
+
+  if (settings.receiveMode == ReceiveMode.text) return;
+
+  final morse = message.data['morse'] as String? ?? '';
+  if (morse.isEmpty) return;
+
+  await MorseHapticEngine.playMorseString(morse, settings);
 }
 
 late final Future<void> _firebaseReady;

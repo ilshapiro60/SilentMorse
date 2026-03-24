@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fa;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -60,6 +62,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildAccountSection(context, auth),
               const SizedBox(height: 32),
               _buildRemoveAdsSection(purchase),
+              const SizedBox(height: 32),
+              _buildIncomingPushSection(auth),
               const SizedBox(height: 32),
               const Text(
                 'Receive',
@@ -165,20 +169,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (v) => service.setSendMode(v!),
                 activeColor: dotAmber,
               ),
-              RadioListTile<SendMode>(
-                title: const Text(
-                  'Touch with text',
-                  style: TextStyle(color: Colors.white, fontFamily: 'monospace'),
-                ),
-                subtitle: const Text(
-                  'Morse and decoded text on screen',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                value: SendMode.touchWithText,
-                groupValue: service.sendMode,
-                onChanged: (v) => service.setSendMode(v!),
-                activeColor: dotAmber,
-              ),
               const SizedBox(height: 32),
               const Text(
                 'Vibration Volumes',
@@ -274,6 +264,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildIncomingPushSection(AuthService auth) {
+    final user = fa.FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Incoming pushes',
+          style: TextStyle(
+            color: dotAmber,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'monospace',
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'When off, new messages are not delivered to this device (no vibration or banner).',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .snapshots(),
+          builder: (context, snap) {
+            if (!snap.hasData) {
+              return const SizedBox.shrink();
+            }
+            final data = snap.data!.data();
+            final receiveIncoming = data?['receiveIncoming'] != false;
+            return SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Allow incoming messages',
+                style: TextStyle(color: Colors.white, fontFamily: 'monospace'),
+              ),
+              subtitle: const Text(
+                'Disabling stops server push for new chat messages',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              value: receiveIncoming,
+              activeThumbColor: dotAmber,
+              onChanged: (v) {
+                FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .set({'receiveIncoming': v}, SetOptions(merge: true));
+              },
+            );
+          },
+        ),
+      ],
     );
   }
 

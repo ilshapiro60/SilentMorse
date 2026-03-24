@@ -49,6 +49,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   bool _showTapFeedback = false;
   String _lastReceivedText = '';
   String? _lastIncomingMsgId;
+  int _prevMessageCount = 0;
 
   int _pressStartMs = 0;
   final Set<int> _activePointers = {};
@@ -82,17 +83,35 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     bool firstEvent = true;
 
     _incomingSub = repo.observeMessages(widget.chatId).listen((messages) {
-      if (messages.isEmpty) return;
+      if (messages.isEmpty) {
+        _prevMessageCount = 0;
+        return;
+      }
       final last = messages.last;
 
       // Skip the initial snapshot — we don't want to replay old messages.
       if (firstEvent) {
         firstEvent = false;
         _lastIncomingMsgId = last.id;
+        _prevMessageCount = messages.length;
         return;
       }
 
-      if (last.id == _lastIncomingMsgId) return;
+      if (last.id == _lastIncomingMsgId) {
+        _prevMessageCount = messages.length;
+        return;
+      }
+
+      // Ephemeral delete: list shrank and the tip reverted to an older message.
+      if (messages.length < _prevMessageCount &&
+          last.id != _lastIncomingMsgId) {
+        _lastIncomingMsgId = last.id;
+        _prevMessageCount = messages.length;
+        return;
+      }
+
+      _prevMessageCount = messages.length;
+
       if (last.senderId == myUserId) return;
       if (last.morse.isEmpty) return;
 
@@ -221,110 +240,87 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
             stream: _tapDecoder.decodedText,
             initialData: '',
             builder: (context, decodedSnapshot) {
-              return StreamBuilder<String>(
-                stream: _tapDecoder.currentMorse,
-                initialData: '',
-                builder: (context, morseSnapshot) {
-                  final decodedText = decodedSnapshot.data ?? '';
-                  final currentMorse = morseSnapshot.data ?? '';
+              final decodedText = decodedSnapshot.data ?? '';
+              final sendMode = widget.settings.sendMode;
+              final showText =
+                  sendMode == SendMode.text && decodedText.isNotEmpty;
 
-                  final sendMode = widget.settings.sendMode;
-                  final showMorse = sendMode == SendMode.touchWithText &&
-                      currentMorse.isNotEmpty;
-                  final showText =
-                      (sendMode == SendMode.text ||
-                          sendMode == SendMode.touchWithText) &&
-                      decodedText.isNotEmpty;
-
-                  return Stack(
-                    children: [
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (_lastReceivedText.isNotEmpty) ...[
-                              const Text(
-                                'Incoming',
-                                style: TextStyle(
-                                    color: Color(0xFF333333), fontSize: 11),
-                              ),
-                              const SizedBox(height: 4),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 32),
-                                child: Text(
-                                  _lastReceivedText,
-                                  style: const TextStyle(
-                                      color: Color(0xFF222222), fontSize: 12),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                            ],
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: _showTapFeedback
-                                    ? const Color(0xFF222222)
-                                    : Colors.black,
-                                shape: BoxShape.circle,
-                              ),
+              return Stack(
+                children: [
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (_lastReceivedText.isNotEmpty) ...[
+                          const Text(
+                            'Incoming',
+                            style: TextStyle(
+                                color: Color(0xFF333333), fontSize: 11),
+                          ),
+                          const SizedBox(height: 4),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32),
+                            child: Text(
+                              _lastReceivedText,
+                              style: const TextStyle(
+                                  color: Color(0xFF222222), fontSize: 12),
+                              textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 32),
-                            if (showMorse)
-                              Text(
-                                currentMorse,
-                                style: const TextStyle(
-                                  color: Color(0xFF111111),
-                                  fontSize: 24,
-                                  fontFamily: 'monospace',
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            if (showMorse) const SizedBox(height: 16),
-                            if (showText)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 32),
-                                child: Text(
-                                  decodedText,
-                                  style: const TextStyle(
-                                      color: Color(0xFF0A0A0A), fontSize: 16),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const Positioned(
-                        left: 16,
-                        right: 16,
-                        bottom: 24,
-                        child: SafeArea(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Tap = dot • Hold = dash • Swipe ↑ = send • Swipe ↓ = unsend',
-                                style: TextStyle(
-                                    color: Color(0xFF333333), fontSize: 11),
-                                textAlign: TextAlign.center,
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                'Two fingers = exit',
-                                style: TextStyle(
-                                    color: Color(0xFF333333), fontSize: 11),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: _showTapFeedback
+                                ? const Color(0xFF222222)
+                                : Colors.black,
+                            shape: BoxShape.circle,
                           ),
                         ),
+                        const SizedBox(height: 32),
+                        if (showText)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32),
+                            child: Text(
+                              decodedText,
+                              style: const TextStyle(
+                                  color: Color(0xFF0A0A0A), fontSize: 16),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 24,
+                    child: SafeArea(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Tap = dot • Hold = dash • Swipe ↑ = send • Swipe ↓ = unsend',
+                            style: TextStyle(
+                                color: Color(0xFF333333), fontSize: 11),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Two fingers = exit',
+                            style: TextStyle(
+                                color: Color(0xFF333333), fontSize: 11),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                       ),
-                    ],
-                  );
-                },
+                    ),
+                  ),
+                ],
               );
             },
           ),

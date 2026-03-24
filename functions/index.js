@@ -119,19 +119,19 @@ exports.createChat = onCall(async (request) => {
 exports.sendMessageNotification = onDocumentCreated(
     "chats/{chatId}/messages/{messageId}",
     async (event) => {
-      const msg = event.data.data();
+      const snap = event.data;
+      if (!snap) return;
+      const msg = snap.data();
       const {chatId} = event.params;
 
       const senderId = msg.senderId;
       const text = msg.text || "";
       if (!senderId || !text) return;
 
-      // Get chat to find the other participant(s).
       const db = admin.firestore();
       const chatDoc = await db.collection("chats").doc(chatId).get();
       if (!chatDoc.exists) return;
 
-      // Only deliver messages for approved (ACTIVE) chats.
       const chatStatus = chatDoc.data().status || "ACTIVE";
       if (chatStatus !== "ACTIVE") return;
 
@@ -140,24 +140,67 @@ exports.sendMessageNotification = onDocumentCreated(
       if (recipientIds.length === 0) return;
 
       const morse = msg.morse || "";
+      const isGroup = !!chatDoc.data().isGroup;
+      const chatName = (chatDoc.data().name || "").trim();
+      const chatLabel = isGroup ?
+        (chatName || "Group") :
+        "Direct";
+
+      let senderName = (msg.senderDisplayName || "").trim();
+      if (!senderName) {
+        const senderDoc = await db.collection("users").doc(senderId).get();
+        senderName = senderDoc.exists ?
+          (senderDoc.data().displayName || "").trim() :
+          "";
+      }
+      if (!senderName) senderName = "Someone";
+
+      const notificationTitle = isGroup ?
+        (chatName || "Group") :
+        senderName;
+      const notificationBody = text.length > 120 ?
+        text.slice(0, 117) + "…" :
+        text;
 
       const messaging = admin.messaging();
       const sends = recipientIds.map(async (recipientId) => {
         const userDoc = await db.collection("users").doc(recipientId).get();
         if (!userDoc.exists) return;
+        if (userDoc.data().receiveIncoming === false) return;
         const token = userDoc.data().fcmToken;
         if (!token) return;
 
-        // Data-only push — no banner, no sound.
-        // The background handler vibrates once; the foreground listener
-        // plays the full morse pattern.
+        const data = {
+          chatId,
+          senderId,
+          type: "message",
+          morse,
+          text,
+          senderName,
+          isGroup: isGroup ? "1" : "0",
+          chatName: chatLabel,
+        };
+
         await messaging.send({
           token,
+          notification: {
+            title: notificationTitle,
+            body: notificationBody,
+          },
           android: {priority: "high"},
-          data: {chatId, senderId, type: "message", morse},
+          data,
         });
       });
 
       await Promise.allSettled(sends);
+
+      // Brief delay so clients can observe the message before ephemeral delete.
+      await new Promise((r) => setTimeout(r, 2000));
+
+      try {
+        await snap.ref.delete();
+      } catch (e) {
+        console.error("sendMessageNotification: delete message failed", e);
+      }
     },
 );
