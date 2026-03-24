@@ -40,7 +40,7 @@ class DefaultFirebaseOptions {
   /// download GoogleService-Info.plist, then run: flutterfire configure
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDvGKx9MIqeVOHeBhRZmW3XUaBB3aiHd0I',
-    appId: '1:747344694468:ios:placeholder',
+    appId: '1:747344694468:ios:4d4eaaf134c6c70e358d91',
     messagingSenderId: '747344694468',
     projectId: 'silent-morse-messenger',
     storageBucket: 'silent-morse-messenger.firebasestorage.app',

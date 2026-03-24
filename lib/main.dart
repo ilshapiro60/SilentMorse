@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -13,11 +15,27 @@ import 'services/chat_repository.dart' show ChatRepository, FirestoreChatReposit
 import 'services/morse_settings_service.dart';
 import 'services/purchase_service.dart';
 
+/// On iOS, Firebase is auto-configured from GoogleService-Info.plist during
+/// plugin registration. Passing explicit [FirebaseOptions] triggers a second
+/// native `[FIRApp configureWithName:options:]` which throws an uncatchable
+/// NSException → SIGABRT.  Only Android needs the Dart-side options.
+Future<void> _initFirebaseSafe() async {
+  try {
+    if (Platform.isIOS) {
+      await Firebase.initializeApp();
+    } else {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    }
+  } catch (e) {
+    debugPrint('Firebase init error (safe to ignore on iOS): $e');
+  }
+}
+
 /// Top-level background message handler — runs in a separate isolate.
 /// Only a single alert buzz; the full morse pattern plays in the foreground.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await _initFirebaseSafe();
   if (message.data['type'] == 'message') {
     try {
       await Vibration.vibrate(duration: 400);
@@ -25,24 +43,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-Future<void> _initFirebase() async {
-  try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  } catch (e) {
-    // Firebase may already be initialized by the native side (iOS) or a
-    // previous Dart call. Any duplicate-app or already-exists error is safe
-    // to swallow — the existing default app will be used.
-    final msg = e.toString().toLowerCase();
-    if (msg.contains('duplicate') || msg.contains('already') || msg.contains('exists')) {
-      return;
-    }
-    debugPrint('Firebase init error: $e');
-    // Do not rethrow — let the app continue and show the error screen if
-    // Firestore/Auth calls subsequently fail.
-  }
-}
-
-final _firebaseInitFuture = _initFirebase();
+final _firebaseInitFuture = _initFirebaseSafe();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
