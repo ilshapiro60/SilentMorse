@@ -43,12 +43,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-final _firebaseInitFuture = _initFirebaseSafe();
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await _initFirebaseSafe();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  // AdMob is initialized lazily for phone only (Wear OS has no WebView)
   runApp(const _SilentMorseAppLoader());
 }
 
@@ -60,78 +58,14 @@ class _SilentMorseAppLoader extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: FutureBuilder<void>(
-        future: _firebaseInitFuture,
-        builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.done) {
-            if (snapshot.hasError) {
-              return _FirebaseErrorScreen(error: snapshot.error);
-            }
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                // Wear OS: square screen, both dimensions < 500 (384, 454, 480)
-                final isWatch = constraints.maxWidth < 500 && constraints.maxHeight < 500;
-                if (isWatch) {
-                  return const WatchApp();
-                }
-                return const _PhoneAppWithAdMob(child: SilentMorseApp());
-              },
-            );
+      home: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWatch = constraints.maxWidth < 500 && constraints.maxHeight < 500;
+          if (isWatch) {
+            return const WatchApp();
           }
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const _PhoneAppWithAdMob(child: SilentMorseApp());
         },
-      ),
-    );
-  }
-}
-
-class _FirebaseErrorScreen extends StatelessWidget {
-  final Object? error;
-
-  const _FirebaseErrorScreen({this.error});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.amber),
-              const SizedBox(height: 24),
-              Text(
-                'Firebase Setup Required',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Silent Morse needs Firebase to be configured.\n\n'
-                '1. Create a project at console.firebase.google.com\n'
-                '2. Add Android app (bundle: com.silentmorse.messenger) and iOS app\n'
-                '3. Download google-services.json and GoogleService-Info.plist\n'
-                '4. Or run: flutterfire configure',
-                style: Theme.of(context).textTheme.bodyMedium,
-                textAlign: TextAlign.center,
-              ),
-              if (error != null) ...[
-                const SizedBox(height: 24),
-                Text(
-                  'Error: $error',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                    fontSize: 12,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ],
-          ),
-        ),
       ),
     );
   }
