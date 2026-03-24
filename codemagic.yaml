@@ -4,7 +4,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: SilentMorse   # matches the key name in Developer Portal integration
+      app_store_connect: SilentMorse
     environment:
       ios_signing:
         distribution_type: app_store
@@ -28,3 +28,38 @@ workflows:
         auth: integration
         submit_to_testflight: false
         submit_to_app_store: true
+
+  android-play-store:
+    name: Android Play Store Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      java: 17
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Set up Android signing
+        script: |
+          KEYSTORE_PATH="$CM_BUILD_DIR/android/upload-keystore.jks"
+          if [ -n "$CM_KEYSTORE" ]; then
+            echo "$CM_KEYSTORE" | base64 --decode > "$KEYSTORE_PATH"
+          else
+            keytool -genkey -v \
+              -keystore "$KEYSTORE_PATH" \
+              -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias upload \
+              -dname "CN=Elijah Shapiro, OU=SilentMorse, O=SilentMorse, L=New York, ST=NY, C=US" \
+              -storepass "${CM_KEYSTORE_PASSWORD:-silentmorse2026}" \
+              -keypass "${CM_KEY_PASSWORD:-silentmorse2026}"
+          fi
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=upload\nstoreFile=%s\n' \
+            "${CM_KEYSTORE_PASSWORD:-silentmorse2026}" \
+            "${CM_KEY_PASSWORD:-silentmorse2026}" \
+            "$KEYSTORE_PATH" \
+            > "$CM_BUILD_DIR/android/key.properties"
+      - name: Build AAB
+        script: flutter build appbundle --release
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+      - android/upload-keystore.jks
