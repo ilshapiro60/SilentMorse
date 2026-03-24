@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -15,17 +13,9 @@ import 'services/chat_repository.dart' show ChatRepository, FirestoreChatReposit
 import 'services/morse_settings_service.dart';
 import 'services/purchase_service.dart';
 
-/// Initialise Firebase.  On iOS the native SDK auto-configures from
-/// GoogleService-Info.plist during plugin registration, so we must NOT pass
-/// explicit [FirebaseOptions] (that triggers a second native configure →
-/// uncatchable NSException → SIGABRT).  Android needs the Dart-side options.
 Future<void> _initFirebase() async {
   try {
-    if (Platform.isIOS) {
-      await Firebase.initializeApp();
-    } else {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    }
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (e) {
     debugPrint('Firebase init: $e');
   }
@@ -35,11 +25,7 @@ Future<void> _initFirebase() async {
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    if (Platform.isIOS) {
-      await Firebase.initializeApp();
-    } else {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    }
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (_) {}
   if (message.data['type'] == 'message') {
     try {
