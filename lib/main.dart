@@ -27,18 +27,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> _initFirebase() async {
   try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    }
-  } catch (e, st) {
-    // Android auto-initializes from google-services.json before Dart runs.
-    // Treat duplicate-app as success.
-    if (e.toString().contains('duplicate-app') || e.toString().contains('already exists')) {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    // Firebase may already be initialized by the native side (iOS) or a
+    // previous Dart call. Any duplicate-app or already-exists error is safe
+    // to swallow — the existing default app will be used.
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('duplicate') || msg.contains('already') || msg.contains('exists')) {
       return;
     }
     debugPrint('Firebase init error: $e');
-    debugPrint('Stack trace: $st');
-    rethrow;
+    // Do not rethrow — let the app continue and show the error screen if
+    // Firestore/Auth calls subsequently fail.
   }
 }
 
