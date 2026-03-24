@@ -154,13 +154,11 @@ class _ChatScreenState extends State<ChatScreen> {
                         .toList();
 
                     return ListView.builder(
+                      reverse: true,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      itemCount: messages.length + 1,
+                      itemCount: messages.length,
                       itemBuilder: (context, index) {
-                        if (index == messages.length) {
-                          return const SizedBox(height: 8);
-                        }
-                        final message = messages[index];
+                        final message = messages[messages.length - 1 - index];
                         final isFromMe = message.senderId == myUserId;
 
                         return _MessageBubble(
