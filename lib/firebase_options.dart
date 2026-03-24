@@ -45,6 +45,6 @@ class DefaultFirebaseOptions {
     projectId: 'silent-morse-messenger',
     storageBucket: 'silent-morse-messenger.firebasestorage.app',
     iosBundleId: 'com.silentmorse.messenger',
-    iosClientId: '747344694468-rflplpsq6d6jef3ovrqash6p19vhaduj.apps.googleusercontent.com',
+    iosClientId: '747344694468-dv2io7gm3ls4qfafnbuld956i44e21ce.apps.googleusercontent.com',
   );
 }

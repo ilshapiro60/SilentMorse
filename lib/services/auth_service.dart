@@ -26,9 +26,7 @@ class AuthService {
   final firebase_auth.FirebaseAuth _auth;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    serverClientId: DefaultFirebaseOptions.ios.iosClientId,
-  );
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   firebase_auth.User? get currentUser => _auth.currentUser;
   Stream<firebase_auth.User?> get authStateChanges => _auth.authStateChanges();
