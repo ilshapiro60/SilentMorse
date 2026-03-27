@@ -26,8 +26,11 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: false
-        submit_to_app_store: true
+        # Upload for TestFlight (internal/external testers). Builds appear after
+        # Apple finishes processing (often 5–30+ minutes).
+        submit_to_testflight: true
+        # Set true only when you intend to send this build to App Review.
+        submit_to_app_store: false
 
   android-play-store:
     name: Android Play Store Release
