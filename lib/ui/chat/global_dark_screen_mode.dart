@@ -58,6 +58,9 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
   static const double _swipeHorizontalThreshold = 80;
   static const int _kExchangeTextBacklogMax = 10;
 
+  final List<int> _tapUpTimestamps = [];
+  static const int _tripleTapWindowMs = 600;
+
   final Map<String, String> _nameCache = {};
 
   static int _timingSignature(MorseSettings s) =>
@@ -293,11 +296,13 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
 
     if (dy.abs() >= _swipeVerticalThreshold) {
       _silenceTimer?.cancel();
+      _tapUpTimestamps.clear();
       final text = _tapDecoder.consumeText();
       if (text.isNotEmpty && _replyToChatId != null) {
         _sendMessage(text);
       }
     } else if (dx.abs() >= _swipeHorizontalThreshold) {
+      _tapUpTimestamps.clear();
       _tapDecoder.appendSymbol('-');
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
@@ -306,6 +311,18 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
       await MorseHapticEngine.dash(settings);
       _resetSilenceTimer();
     } else {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _tapUpTimestamps.add(now);
+      if (_tapUpTimestamps.length > 3) _tapUpTimestamps.removeAt(0);
+      if (_tapUpTimestamps.length == 3 &&
+          now - _tapUpTimestamps.first <= _tripleTapWindowMs) {
+        _tapUpTimestamps.clear();
+        _tapDecoder.reset();
+        _silenceTimer?.cancel();
+        widget.onExit();
+        return;
+      }
+
       _tapDecoder.onPressUp();
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {

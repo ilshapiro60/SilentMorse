@@ -39,6 +39,9 @@ class _TestDarkModeState extends State<TestDarkMode> {
   static const double _swipeVerticalThreshold = 80;
   static const double _swipeHorizontalThreshold = 80;
 
+  final List<int> _tapUpTimestamps = [];
+  static const int _tripleTapWindowMs = 600;
+
   String _sentText = '';
   Timer? _sentTextTimer;
   Timer? _silenceTimer;
@@ -151,8 +154,10 @@ class _TestDarkModeState extends State<TestDarkMode> {
 
     if (dy.abs() >= _swipeVerticalThreshold) {
       _silenceTimer?.cancel();
+      _tapUpTimestamps.clear();
       _finishInput();
     } else if (dx.abs() >= _swipeHorizontalThreshold) {
+      _tapUpTimestamps.clear();
       _tapDecoder.appendSymbol('-');
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
@@ -161,6 +166,18 @@ class _TestDarkModeState extends State<TestDarkMode> {
       await MorseHapticEngine.dash(settings);
       _resetSilenceTimer();
     } else {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _tapUpTimestamps.add(now);
+      if (_tapUpTimestamps.length > 3) _tapUpTimestamps.removeAt(0);
+      if (_tapUpTimestamps.length == 3 &&
+          now - _tapUpTimestamps.first <= _tripleTapWindowMs) {
+        _tapUpTimestamps.clear();
+        _tapDecoder.reset();
+        _silenceTimer?.cancel();
+        widget.onExit();
+        return;
+      }
+
       _tapDecoder.onPressUp();
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
@@ -279,7 +296,7 @@ class _TestDarkModeState extends State<TestDarkMode> {
                             ),
                             SizedBox(height: 4),
                             Text(
-                              'Swipe up/down = send • Two fingers = exit',
+                              'Swipe up/down = send • Triple-tap = exit',
                               style: TextStyle(
                                   color: Color(0xFF222222), fontSize: 12),
                             ),

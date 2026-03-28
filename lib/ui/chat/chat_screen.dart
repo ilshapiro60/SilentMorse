@@ -301,7 +301,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           Tooltip(
             message:
-                'Silent mode: tap = dot, long press = dash, swipe up or down = send; back / swipe back = return to chat',
+                'Silent mode: tap = dot, long press = dash, swipe up/down = send; triple-tap = exit',
             child: IconButton(
               icon: const Icon(Icons.dark_mode_outlined),
               onPressed: () => setState(() => _isDarkScreenActive = true),

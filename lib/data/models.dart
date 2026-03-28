@@ -59,10 +59,10 @@ class MorseSettings {
   final int autoSendDelayMs;
 
   MorseSettings({
-    this.dotDurationMs = 100,
+    this.dotDurationMs = 200,
     this.dashDurationMs = 300,
-    this.letterGapMs = 600,
-    this.wordGapMs = 1400,
+    this.letterGapMs = 1000,
+    this.wordGapMs = 2000,
     this.vibrationIntensity = VibrationIntensity.medium,
     this.receiveMode = ReceiveMode.vibrate,
     this.sendMode = SendMode.text,
@@ -75,10 +75,10 @@ class MorseSettings {
     final receive = map['receiveMode']?.toString() ?? 'VIBRATE';
     final send = map['sendMode']?.toString() ?? 'TEXT';
     return MorseSettings(
-      dotDurationMs: map['dotDurationMs'] ?? 100,
+      dotDurationMs: map['dotDurationMs'] ?? 200,
       dashDurationMs: map['dashDurationMs'] ?? 300,
-      letterGapMs: map['letterGapMs'] ?? 600,
-      wordGapMs: map['wordGapMs'] ?? 1400,
+      letterGapMs: map['letterGapMs'] ?? 1000,
+      wordGapMs: map['wordGapMs'] ?? 2000,
       vibrationIntensity: VibrationIntensity.fromString(intensity),
       receiveMode: ReceiveMode.fromString(receive),
       sendMode: SendMode.fromString(send),
