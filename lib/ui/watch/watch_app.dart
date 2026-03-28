@@ -9,7 +9,7 @@ import '../../services/morse_settings_service.dart';
 import 'watch_contacts_screen.dart';
 
 /// Watch-optimized app for Wear OS.
-/// Compact UI, morse tap to send, haptic receive.
+/// Morse tap to send and haptic morse receive; no chat text backlog on-watch.
 class WatchApp extends StatelessWidget {
   const WatchApp({super.key});
 

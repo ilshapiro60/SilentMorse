@@ -2,6 +2,7 @@
 ///
 /// Converts raw press/release events into Morse symbols, then letters, then words.
 /// Timing-based: short press = dot, long press = dash.
+/// Callers may also append a dash after a horizontal slide (dark mode).
 /// Silence after a symbol = letter boundary. Longer silence = word boundary.
 library silentmorse_messenger.util.tap_decoder;
 
@@ -41,6 +42,13 @@ class TapDecoder {
   void onPressUp() {
     final pressDurationMs = DateTime.now().millisecondsSinceEpoch - _pressStartMs;
     final symbol = pressDurationMs < settings.dotDurationMs * 2 ? '.' : '-';
+    appendSymbol(symbol);
+  }
+
+  /// Record a dot or dash (e.g. horizontal slide → dash in dark mode).
+  /// Uses the same letter/word gap timing as [onPressUp].
+  void appendSymbol(String symbol) {
+    if (symbol != '.' && symbol != '-') return;
 
     _currentLetterSymbols.write(symbol);
     _currentMorse = _currentLetterSymbols.toString();

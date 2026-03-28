@@ -14,10 +14,12 @@ import 'ui/contacts/contacts_screen.dart';
 import 'ui/chat/chat_screen.dart';
 import 'util/morse_haptic_engine.dart';
 
-/// Tracks which chat is currently shown in DarkScreenMode so the global
-/// foreground listener skips double-vibration for that chat.
+/// Tracks which chat is currently open so the foreground FCM listener can skip
+/// duplicate SnackBars / vibrations for that chat.
 class GlobalReceiveState {
   static String? activeDarkModeChatId;
+  /// Set while a normal (text-mode) chat screen is open.
+  static String? activeChatId;
 }
 
 class AppRouter extends StatefulWidget {
@@ -44,6 +46,7 @@ class _AppRouterState extends State<AppRouter> {
   }
 
   Future<void> _onForegroundMessage(RemoteMessage message) async {
+    debugPrint('[FCM] received: type=${message.data['type']}');
     final type = message.data['type'] as String?;
 
     if (type == 'chat_request') {
@@ -83,18 +86,34 @@ class _AppRouterState extends State<AppRouter> {
     final morse = message.data['morse'] as String? ?? '';
     final text = message.data['text'] as String? ?? '';
 
-    // Dark-screen UIs handle incoming via Firestore; skip FCM to avoid double
-    // vibrate. Global mode uses activeDarkModeChatId == '__global__'.
-    final active = GlobalReceiveState.activeDarkModeChatId;
+    final settings = context.read<MorseSettingsService>().settings;
+
+    final darkActive = GlobalReceiveState.activeDarkModeChatId;
+    debugPrint('[FCM] chatId=$chatId darkActive=$darkActive '
+        'activeChatId=${GlobalReceiveState.activeChatId} '
+        'receiveMode=${settings.receiveMode} morse=${morse.isNotEmpty}');
+
+    // Dark mode is tactile-only — ALWAYS vibrate regardless of receiveMode.
     if (chatId != null &&
-        active != null &&
-        (active == '__global__' || chatId == active)) {
+        darkActive != null &&
+        (darkActive == '__global__' || chatId == darkActive)) {
+      if (morse.isNotEmpty) {
+        debugPrint('[FCM] dark-mode vibrate!');
+        MorseHapticEngine.playMorseString(morse, settings);
+      }
       return;
     }
 
-    final settings = context.read<MorseSettingsService>().settings;
+    // Normal text-mode chat is open — messages already visible via Firestore
+    // StreamBuilder, so skip the SnackBar / vibration.
+    if (chatId != null && chatId == GlobalReceiveState.activeChatId) {
+      debugPrint('[FCM] text-mode chat open, suppressing');
+      return;
+    }
+
     if (settings.receiveMode == ReceiveMode.vibrate) {
       if (morse.isEmpty) return;
+      debugPrint('[FCM] default vibrate');
       MorseHapticEngine.playMorseString(morse, settings);
     } else {
       if (text.isEmpty) return;

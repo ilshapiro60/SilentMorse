@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart' hide User;
 
 import '../data/models.dart';
 import '../services/chat_repository.dart';
@@ -85,7 +84,31 @@ class MockChatRepository extends ChatRepository {
   Future<String> createGroupChat(String name, List<String> participantIds) async => 'mock-group-id';
 
   @override
-  Future<void> sendMessage(String chatId, String text, {InputMode inputMode = InputMode.typed, String? senderDisplayName}) async {}
+  Future<String> sendMessage(
+    String chatId,
+    String text, {
+    InputMode inputMode = InputMode.typed,
+    String? senderDisplayName,
+    void Function(String messageId)? onMessageId,
+  }) async {
+    onMessageId?.call('mock-message-id');
+    return 'mock-message-id';
+  }
+
+  @override
+  Future<void> approveChat(String chatId) async {}
+
+  @override
+  Future<void> declineChat(String chatId) async {}
+
+  @override
+  Future<void> deleteChat(String chatId) async {}
+
+  @override
+  Future<void> deleteMessage(String chatId, String messageId) async {}
+
+  @override
+  Future<Message?> getLastMyMessage(String chatId) async => null;
 
   @override
   Future<void> addContact(User user) async {}

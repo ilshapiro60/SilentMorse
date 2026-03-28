@@ -194,13 +194,8 @@ exports.sendMessageNotification = onDocumentCreated(
 
       await Promise.allSettled(sends);
 
-      // Brief delay so clients can observe the message before ephemeral delete.
-      await new Promise((r) => setTimeout(r, 2000));
-
-      try {
-        await snap.ref.delete();
-      } catch (e) {
-        console.error("sendMessageNotification: delete message failed", e);
-      }
+      // Messages stay in Firestore permanently.
+      // (Ephemeral delete was removed — it made
+      // bubbles vanish after ~2 s for everyone.)
     },
 );

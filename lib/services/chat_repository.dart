@@ -13,7 +13,16 @@ abstract class ChatRepository {
   Future<User?> getUserById(String userId);
   Future<String> getOrCreateChat(String targetUserId);
   Future<String> createGroupChat(String name, List<String> participantIds);
-  Future<void> sendMessage(String chatId, String text, {InputMode inputMode = InputMode.typed, String? senderDisplayName});
+  /// Returns the new message document id.
+  /// [onMessageId] is invoked synchronously with that id before the write
+  /// completes so UI can track the doc (e.g. broom filter) before snapshot updates.
+  Future<String> sendMessage(
+    String chatId,
+    String text, {
+    InputMode inputMode = InputMode.typed,
+    String? senderDisplayName,
+    void Function(String messageId)? onMessageId,
+  });
   Future<void> approveChat(String chatId);
   Future<void> declineChat(String chatId);
   Future<void> deleteChat(String chatId);
@@ -93,19 +102,42 @@ class FirestoreChatRepository extends ChatRepository {
   // MESSAGES
   // ─────────────────────────────────────────────
 
+  /// All message docs for the chat, sorted oldest → newest (pending [sentAt]
+  /// last). No Firestore [orderBy]: ordering on [sentAt] can omit or reshuffle
+  /// docs while [serverTimestamp] is resolving, which made bubbles vanish.
   @override
   Stream<List<Message>> observeMessages(String chatId) {
     return _firestore
         .collection('chats')
         .doc(chatId)
         .collection('messages')
-        .orderBy('sentAt', descending: false)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((d) => Message.fromFirestore(d)).toList());
+        .map((snapshot) {
+      final list =
+          snapshot.docs.map((d) => Message.fromFirestore(d)).toList();
+      list.sort(_compareMessagesChronological);
+      return list;
+    });
+  }
+
+  static int _compareMessagesChronological(Message a, Message b) {
+    final ta = a.sentAt;
+    final tb = b.sentAt;
+    if (ta == null && tb == null) return a.id.compareTo(b.id);
+    if (ta == null) return 1;
+    if (tb == null) return -1;
+    final c = ta.compareTo(tb);
+    return c != 0 ? c : a.id.compareTo(b.id);
   }
 
   @override
-  Future<void> sendMessage(String chatId, String text, {InputMode inputMode = InputMode.typed, String? senderDisplayName}) async {
+  Future<String> sendMessage(
+    String chatId,
+    String text, {
+    InputMode inputMode = InputMode.typed,
+    String? senderDisplayName,
+    void Function(String messageId)? onMessageId,
+  }) async {
     final morse = MorseHapticEngine.textToMorse(text);
     final data = <String, dynamic>{
       'senderId': _myUserId,
@@ -119,12 +151,15 @@ class FirestoreChatRepository extends ChatRepository {
     if (senderDisplayName != null && senderDisplayName.isNotEmpty) {
       data['senderDisplayName'] = senderDisplayName;
     }
-    await _firestore.collection('chats').doc(chatId).collection('messages').add(data);
+    final ref = _firestore.collection('chats').doc(chatId).collection('messages').doc();
+    onMessageId?.call(ref.id);
+    await ref.set(data);
     await _firestore.collection('chats').doc(chatId).update({
       'lastMessage': text,
       'lastMessageBy': _myUserId,
       'lastMessageAt': FieldValue.serverTimestamp(),
     });
+    return ref.id;
   }
 
   @override

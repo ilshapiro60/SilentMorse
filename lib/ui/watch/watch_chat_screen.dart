@@ -11,9 +11,11 @@ import '../../util/morse_haptic_engine.dart';
 import '../../util/tap_decoder.dart';
 import '../theme/silentmorse_theme.dart';
 
-/// Morse tap interface for Wear OS.
-/// Tap = dot, long press = dash, swipe up = send now,
-/// swipe down = unsend last, two fingers = exit.
+/// Morse tap interface for Wear OS (touch in, vibration out).
+/// Incoming messages always play as morse haptics regardless of phone
+/// “receive as text” — the watch does not show a message backlog.
+/// Tap = dot, long press = dash, horizontal slide = dash,
+/// swipe up or down = send now, two fingers = exit.
 class WatchChatScreen extends StatefulWidget {
   final String chatId;
   final String chatTitle;
@@ -30,16 +32,17 @@ class _WatchChatScreenState extends State<WatchChatScreen> {
   StreamSubscription? _incomingSub;
   Timer? _silenceTimer;
 
-  String _lastReceivedText = '';
   String? _lastIncomingMsgId;
 
   int _pressStartMs = 0;
   final Set<int> _activePointers = {};
   final Map<int, double> _pointerStartY = {};
   final Map<int, double> _pointerLastY = {};
+  final Map<int, double> _pointerStartX = {};
+  final Map<int, double> _pointerLastX = {};
 
-  static const double _swipeUpThreshold = 60;
-  static const double _swipeDownThreshold = 60;
+  static const double _swipeVerticalThreshold = 60;
+  static const double _swipeHorizontalThreshold = 60;
 
   @override
   void initState() {
@@ -72,15 +75,7 @@ class _WatchChatScreenState extends State<WatchChatScreen> {
 
       if (!mounted) return;
       final settings = context.read<MorseSettingsService>().settings;
-      switch (settings.receiveMode) {
-        case ReceiveMode.vibrate:
-          MorseHapticEngine.playMorseString(last.morse, settings);
-          if (mounted) setState(() => _lastReceivedText = '');
-        case ReceiveMode.text:
-          if (last.text.isNotEmpty && mounted) {
-            setState(() => _lastReceivedText = last.text);
-          }
-      }
+      MorseHapticEngine.playMorseString(last.morse, settings);
     });
   }
 
@@ -102,27 +97,22 @@ class _WatchChatScreenState extends State<WatchChatScreen> {
     _silenceTimer = Timer(Duration(milliseconds: delayMs), _autoSend);
   }
 
-  void _autoSend() {
-    final text = _tapDecoder.consumeText();
-    if (text.isNotEmpty) {
-      final senderName =
-          context.read<MorseSettingsService>().senderDisplayName;
-      context.read<ChatRepository>().sendMessage(
-            widget.chatId,
-            text,
-            senderDisplayName: senderName.isNotEmpty ? senderName : null,
-          );
-    }
+  void _sendOutgoing(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return;
+    final senderName =
+        context.read<MorseSettingsService>().senderDisplayName;
+    context.read<ChatRepository>().sendMessage(
+          widget.chatId,
+          t,
+          inputMode: InputMode.tapped,
+          senderDisplayName: senderName.isNotEmpty ? senderName : null,
+        );
   }
 
-  // --- Unsend ---
-
-  Future<void> _unsendLast() async {
-    final repo = context.read<ChatRepository>();
-    final msg = await repo.getLastMyMessage(widget.chatId);
-    if (msg != null) {
-      await repo.deleteMessage(widget.chatId, msg.id);
-    }
+  void _autoSend() {
+    final text = _tapDecoder.consumeText();
+    if (text.isNotEmpty) _sendOutgoing(text);
   }
 
   // --- Pointer handling ---
@@ -134,52 +124,54 @@ class _WatchChatScreenState extends State<WatchChatScreen> {
       _silenceTimer?.cancel();
       _pointerStartY.clear();
       _pointerLastY.clear();
+      _pointerStartX.clear();
+      _pointerLastX.clear();
       Navigator.of(context).pop();
       return;
     }
     _pressStartMs = DateTime.now().millisecondsSinceEpoch;
     _pointerStartY[event.pointer] = event.localPosition.dy;
     _pointerLastY[event.pointer] = event.localPosition.dy;
+    _pointerStartX[event.pointer] = event.localPosition.dx;
+    _pointerLastX[event.pointer] = event.localPosition.dx;
     _tapDecoder.onPressDown();
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (_pointerLastY.containsKey(event.pointer)) {
       _pointerLastY[event.pointer] = event.localPosition.dy;
+      _pointerLastX[event.pointer] = event.localPosition.dx;
     }
   }
 
   Future<void> _handlePointerUp(PointerUpEvent event) async {
     final startY = _pointerStartY[event.pointer];
     final lastY = _pointerLastY[event.pointer];
+    final startX = _pointerStartX[event.pointer];
+    final lastX = _pointerLastX[event.pointer];
     _pointerStartY.remove(event.pointer);
     _pointerLastY.remove(event.pointer);
+    _pointerStartX.remove(event.pointer);
+    _pointerLastX.remove(event.pointer);
     _activePointers.remove(event.pointer);
 
     if (_activePointers.isNotEmpty) return;
 
     final duration = DateTime.now().millisecondsSinceEpoch - _pressStartMs;
     final dy = (startY != null && lastY != null) ? lastY - startY : 0.0;
+    final dx = (startX != null && lastX != null) ? lastX - startX : 0.0;
 
     final settings = context.read<MorseSettingsService>().settings;
-    final senderName = context.read<MorseSettingsService>().senderDisplayName;
 
-    if (dy < -_swipeUpThreshold) {
-      // Swipe up → send immediately.
+    if (dy.abs() >= _swipeVerticalThreshold) {
+      // Swipe up or down → send immediately.
       _silenceTimer?.cancel();
       final text = _tapDecoder.consumeText();
-      if (text.isNotEmpty) {
-        context.read<ChatRepository>().sendMessage(
-              widget.chatId,
-              text,
-              senderDisplayName: senderName.isNotEmpty ? senderName : null,
-            );
-      }
-    } else if (dy > _swipeDownThreshold) {
-      // Swipe down → unsend last message.
-      _tapDecoder.reset();
-      _silenceTimer?.cancel();
-      await _unsendLast();
+      if (text.isNotEmpty) _sendOutgoing(text);
+    } else if (dx.abs() >= _swipeHorizontalThreshold) {
+      _tapDecoder.appendSymbol('-');
+      await MorseHapticEngine.dash(settings);
+      _resetSilenceTimer();
     } else {
       // Normal tap/press.
       _tapDecoder.onPressUp();
@@ -230,27 +222,6 @@ class _WatchChatScreenState extends State<WatchChatScreen> {
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (_lastReceivedText.isNotEmpty) ...[
-                      const Text(
-                        'Incoming',
-                        style:
-                            TextStyle(color: Colors.white54, fontSize: 10),
-                      ),
-                      const SizedBox(height: 4),
-                      Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          _lastReceivedText,
-                          style: const TextStyle(
-                              color: dotAmber, fontSize: 12),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
                     if (currentMorse.isNotEmpty)
                       Text(
                         currentMorse,
@@ -275,7 +246,7 @@ class _WatchChatScreenState extends State<WatchChatScreen> {
                       ),
                     const SizedBox(height: 24),
                     const Text(
-                      'Tap • Hold = dash • Swipe ↑ = send • Swipe ↓ = unsend',
+                      'Tap • Hold = dash • Swipe ↑ or ↓ = send',
                       style:
                           TextStyle(color: Colors.white38, fontSize: 10),
                       textAlign: TextAlign.center,

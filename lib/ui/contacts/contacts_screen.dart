@@ -79,11 +79,8 @@ class _ContactsBodyState extends State<_ContactsBody> {
   }
 
   void _enterGlobalDark(BuildContext context) {
-    final settings =
-        context.read<MorseSettingsService>().settings;
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => GlobalDarkScreenMode(
-        settings: settings,
         onExit: () => Navigator.of(context).pop(),
       ),
     ));
@@ -103,7 +100,7 @@ class _ContactsBodyState extends State<_ContactsBody> {
           Tooltip(
             message: 'Enter silent mode (all friends)',
             child: IconButton(
-              icon: const Icon(Icons.sensors),
+              icon: const Icon(Icons.dark_mode),
               color: dotAmber,
               onPressed: () => _enterGlobalDark(context),
             ),
@@ -307,26 +304,20 @@ class _ContactsBodyState extends State<_ContactsBody> {
 
         void goToDark(Chat chat) {
           if (!chat.isActive) return;
-          final settings =
-              context.read<MorseSettingsService>().settings;
           final senderName =
               context.read<MorseSettingsService>().senderDisplayName;
           Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => DarkScreenMode(
               chatId: chat.id,
-              settings: settings,
+              repo: repo,
+              myUserId: myUserId,
               onSendMessage: (text) => repo.sendMessage(
                 chat.id,
                 text,
+                inputMode: InputMode.tapped,
                 senderDisplayName:
                     senderName.isNotEmpty ? senderName : null,
               ),
-              onUnsend: () async {
-                final msg = await repo.getLastMyMessage(chat.id);
-                if (msg != null) {
-                  await repo.deleteMessage(chat.id, msg.id);
-                }
-              },
               onExit: () => Navigator.of(context).pop(),
             ),
           ));

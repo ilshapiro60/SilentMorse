@@ -8,25 +8,23 @@ import 'package:screen_brightness/screen_brightness.dart';
 import '../../app.dart';
 import '../../data/models.dart';
 import '../../services/chat_repository.dart';
+import '../../services/morse_settings_service.dart';
 import 'package:vibration/vibration.dart';
 
 import '../../util/morse_haptic_engine.dart';
 import '../../util/tap_decoder.dart';
+import 'dark_decoded_draft.dart';
 
 /// Global dark-screen mode — listens to ALL active chats simultaneously.
-/// Ilya doesn't need to pick a friend first.
 ///
 /// Receive: whenever any friend sends a message the morse vibrates.
-/// Reply:   swipe up sends the current morse to whoever messaged most recently.
-/// Unsend:  swipe down deletes Ilya's last sent message (across any chat).
-/// Exit:    two-finger touch.
+/// Reply:   swipe up or down sends the current morse to whoever messaged most recently.
+/// Exit:    system back / predictive back, or two-finger touch.
 class GlobalDarkScreenMode extends StatefulWidget {
-  final MorseSettings settings;
   final VoidCallback onExit;
 
   const GlobalDarkScreenMode({
     super.key,
-    required this.settings,
     required this.onExit,
   });
 
@@ -36,36 +34,68 @@ class GlobalDarkScreenMode extends StatefulWidget {
 
 class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
   late TapDecoder _tapDecoder;
+  late MorseSettingsService _settingsSvc;
+  late VoidCallback _onSettingsChanged;
+  ReceiveMode _priorReceiveMode = ReceiveMode.vibrate;
+  int _tapDecoderTimingSig = 0;
   StreamSubscription<List<Chat>>? _chatListSub;
   final Map<String, StreamSubscription<List<Message>>> _chatSubs = {};
-  final Map<String, bool> _chatFirstEvent = {};
-  final Map<String, String?> _chatLastMsgId = {};
-  final Map<String, int> _chatPrevCount = {};
+  final Map<String, Set<String>> _chatSeenIds = {};
   Timer? _silenceTimer;
 
-  // Who to reply to (the last friend who sent a message).
   String? _replyToChatId;
-  String _replyToName = '';
-  String _lastReceivedText = '';
+  final List<String> _exchangeTextBacklog = [];
   bool _showTapFeedback = false;
 
   int _pressStartMs = 0;
   final Set<int> _activePointers = {};
   final Map<int, double> _pointerStartY = {};
   final Map<int, double> _pointerLastY = {};
+  final Map<int, double> _pointerStartX = {};
+  final Map<int, double> _pointerLastX = {};
 
-  static const double _swipeUpThreshold = 80;
-  static const double _swipeDownThreshold = 80;
+  static const double _swipeVerticalThreshold = 80;
+  static const double _swipeHorizontalThreshold = 80;
+  static const int _kExchangeTextBacklogMax = 10;
 
-  // Name cache: chatId → other participant's display name.
   final Map<String, String> _nameCache = {};
+
+  static int _timingSignature(MorseSettings s) =>
+      Object.hash(s.dotDurationMs, s.letterGapMs, s.wordGapMs);
 
   @override
   void initState() {
     super.initState();
-    _tapDecoder = TapDecoder(widget.settings);
+    _settingsSvc = context.read<MorseSettingsService>();
+    final initial = _settingsSvc.settings;
+    _priorReceiveMode = initial.receiveMode;
+    _tapDecoder = TapDecoder(initial);
+    _tapDecoderTimingSig = _timingSignature(initial);
+
+    _onSettingsChanged = () {
+      final s = _settingsSvc.settings;
+      final nextReceive = s.receiveMode;
+      if (_priorReceiveMode == ReceiveMode.text &&
+          nextReceive == ReceiveMode.vibrate &&
+          mounted) {
+        setState(() => _exchangeTextBacklog.clear());
+      }
+      _priorReceiveMode = nextReceive;
+
+      final sig = _timingSignature(s);
+      if (sig != _tapDecoderTimingSig && mounted) {
+        setState(() {
+          _tapDecoder.dispose();
+          _tapDecoder = TapDecoder(s);
+          _tapDecoderTimingSig = sig;
+        });
+      } else if (mounted) {
+        setState(() {});
+      }
+    };
+    _settingsSvc.addListener(_onSettingsChanged);
+
     _initBrightness();
-    // Prevent the per-chat foreground FCM listener from double-vibrating.
     GlobalReceiveState.activeDarkModeChatId = '__global__';
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _startListeningToAllChats());
@@ -85,23 +115,17 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
       final active = chats.where((c) => c.isActive).toList();
       final activeIds = active.map((c) => c.id).toSet();
 
-      // Cancel subs for chats no longer active.
       for (final id in _chatSubs.keys.toList()) {
         if (!activeIds.contains(id)) {
           _chatSubs[id]?.cancel();
           _chatSubs.remove(id);
-          _chatFirstEvent.remove(id);
-          _chatLastMsgId.remove(id);
-          _chatPrevCount.remove(id);
+          _chatSeenIds.remove(id);
         }
       }
 
-      // Subscribe to new active chats.
       for (final chat in active) {
         if (_chatSubs.containsKey(chat.id)) continue;
-        _chatFirstEvent[chat.id] = true;
 
-        // Resolve other participant's name upfront.
         final otherId = chat.otherParticipant(myUserId);
         if (!_nameCache.containsKey(chat.id) && otherId.isNotEmpty) {
           final user = await repo.getUserById(otherId);
@@ -112,70 +136,61 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
           }
         }
 
+        final seen = <String>{};
+        _chatSeenIds[chat.id] = seen;
+        bool firstSnapshot = true;
+
         _chatSubs[chat.id] =
-            repo.observeMessages(chat.id).listen((messages) async {
-          if (messages.isEmpty) {
-            _chatPrevCount[chat.id] = 0;
-            return;
-          }
-          final last = messages.last;
-
-          // Skip the initial snapshot.
-          if (_chatFirstEvent[chat.id] == true) {
-            _chatFirstEvent[chat.id] = false;
-            _chatLastMsgId[chat.id] = last.id;
-            _chatPrevCount[chat.id] = messages.length;
-            return;
-          }
-
-          if (last.id == _chatLastMsgId[chat.id]) {
-            _chatPrevCount[chat.id] = messages.length;
-            return;
-          }
-
-          final prevLen = _chatPrevCount[chat.id] ?? 0;
-          if (messages.length < prevLen &&
-              last.id != _chatLastMsgId[chat.id]) {
-            _chatLastMsgId[chat.id] = last.id;
-            _chatPrevCount[chat.id] = messages.length;
-            return;
-          }
-
-          _chatPrevCount[chat.id] = messages.length;
-
-          if (last.senderId == myUserId) return;
-          if (last.morse.isEmpty) return;
-
-          _chatLastMsgId[chat.id] = last.id;
-
-          // Update reply target to the chat that just spoke.
-          if (mounted) {
-            setState(() {
-              _replyToChatId = chat.id;
-              _replyToName = _nameCache[chat.id] ?? 'Friend';
-              _lastReceivedText =
-                  widget.settings.receiveMode == ReceiveMode.text
-                      ? last.text
-                      : '';
-            });
-          }
-
-          if (widget.settings.receiveMode == ReceiveMode.vibrate) {
-            // Group messages get a short alert buzz first so Ilya can
-            // feel the difference between a 1-on-1 and a group message.
-            if (chat.isGroup) {
-              await Vibration.vibrate(duration: 80);
-              await Future.delayed(const Duration(milliseconds: 120));
+            repo.observeMessages(chat.id).listen(
+          (messages) async {
+            if (firstSnapshot) {
+              firstSnapshot = false;
+              for (final m in messages) {
+                seen.add(m.id);
+              }
+              return;
             }
-            MorseHapticEngine.playMorseString(last.morse, widget.settings);
-          }
-        });
+
+            for (final m in messages) {
+              if (seen.contains(m.id)) continue;
+              seen.add(m.id);
+              if (m.senderId == myUserId) continue;
+              if (!mounted) return;
+
+              setState(() => _replyToChatId = chat.id);
+
+              final settings = _settingsSvc.settings;
+              if (settings.receiveMode == ReceiveMode.text) {
+                final t = m.text.trim();
+                if (t.isNotEmpty && mounted) {
+                  final from = _nameCache[chat.id] ?? 'Friend';
+                  _appendExchangeLine('$from: $t');
+                }
+              }
+
+              // Dark mode is tactile — always vibrate regardless of
+              // receiveMode setting.
+              if (chat.isGroup) {
+                await Vibration.vibrate(duration: 80);
+                await Future.delayed(
+                    const Duration(milliseconds: 120));
+              }
+              if (m.morse.isNotEmpty) {
+                MorseHapticEngine.playMorseString(
+                    m.morse, settings);
+              }
+            }
+          },
+          onError: (e) =>
+              debugPrint('Global dark listener error ($chat.id): $e'),
+        );
       }
     });
   }
 
   @override
   void dispose() {
+    _settingsSvc.removeListener(_onSettingsChanged);
     _tapDecoder.dispose();
     _chatListSub?.cancel();
     for (final sub in _chatSubs.values) {
@@ -193,10 +208,8 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
     } catch (_) {}
   }
 
-  // ── Silence timer ────────────────────────────────────────────────────────
-
   void _resetSilenceTimer() {
-    final delayMs = widget.settings.autoSendDelayMs;
+    final delayMs = _settingsSvc.settings.autoSendDelayMs;
     if (delayMs <= 0) return;
     _silenceTimer?.cancel();
     _silenceTimer = Timer(Duration(milliseconds: delayMs), _autoSend);
@@ -209,14 +222,29 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
     }
   }
 
+  void _appendExchangeLine(String line) {
+    final t = line.trim();
+    if (t.isEmpty || !mounted) return;
+    setState(() {
+      _exchangeTextBacklog.add(t);
+      while (_exchangeTextBacklog.length > _kExchangeTextBacklogMax) {
+        _exchangeTextBacklog.removeAt(0);
+      }
+    });
+  }
+
   void _sendMessage(String text) {
     final chatId = _replyToChatId;
     if (chatId == null) return;
-    final repo = context.read<ChatRepository>();
-    repo.sendMessage(chatId, text);
+    final t = text.trim();
+    if (t.isEmpty) return;
+    _appendExchangeLine('You: $t');
+    context.read<ChatRepository>().sendMessage(
+          chatId,
+          t,
+          inputMode: InputMode.tapped,
+        );
   }
-
-  // ── Pointer handling ─────────────────────────────────────────────────────
 
   void _handlePointerDown(PointerDownEvent event) {
     _activePointers.add(event.pointer);
@@ -225,190 +253,183 @@ class _GlobalDarkScreenModeState extends State<GlobalDarkScreenMode> {
       _silenceTimer?.cancel();
       _pointerStartY.clear();
       _pointerLastY.clear();
+      _pointerStartX.clear();
+      _pointerLastX.clear();
       widget.onExit();
       return;
     }
     _pressStartMs = DateTime.now().millisecondsSinceEpoch;
     _pointerStartY[event.pointer] = event.localPosition.dy;
     _pointerLastY[event.pointer] = event.localPosition.dy;
+    _pointerStartX[event.pointer] = event.localPosition.dx;
+    _pointerLastX[event.pointer] = event.localPosition.dx;
     _tapDecoder.onPressDown();
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (_pointerLastY.containsKey(event.pointer)) {
       _pointerLastY[event.pointer] = event.localPosition.dy;
+      _pointerLastX[event.pointer] = event.localPosition.dx;
     }
   }
 
   Future<void> _handlePointerUp(PointerUpEvent event) async {
     final startY = _pointerStartY[event.pointer];
     final lastY = _pointerLastY[event.pointer];
+    final startX = _pointerStartX[event.pointer];
+    final lastX = _pointerLastX[event.pointer];
     _pointerStartY.remove(event.pointer);
     _pointerLastY.remove(event.pointer);
+    _pointerStartX.remove(event.pointer);
+    _pointerLastX.remove(event.pointer);
     _activePointers.remove(event.pointer);
 
     if (_activePointers.isNotEmpty) return;
 
     final duration = DateTime.now().millisecondsSinceEpoch - _pressStartMs;
     final dy = (startY != null && lastY != null) ? lastY - startY : 0.0;
+    final dx = (startX != null && lastX != null) ? lastX - startX : 0.0;
+    final settings = _settingsSvc.settings;
 
-    if (dy < -_swipeUpThreshold) {
-      // Swipe up → send immediately.
+    if (dy.abs() >= _swipeVerticalThreshold) {
       _silenceTimer?.cancel();
       final text = _tapDecoder.consumeText();
       if (text.isNotEmpty && _replyToChatId != null) {
         _sendMessage(text);
       }
-    } else if (dy > _swipeDownThreshold) {
-      // Swipe down → unsend last sent message across all chats.
-      _tapDecoder.reset();
-      _silenceTimer?.cancel();
-      await _unsendLast();
+    } else if (dx.abs() >= _swipeHorizontalThreshold) {
+      _tapDecoder.appendSymbol('-');
+      setState(() => _showTapFeedback = true);
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted) setState(() => _showTapFeedback = false);
+      });
+      await MorseHapticEngine.dash(settings);
+      _resetSilenceTimer();
     } else {
       _tapDecoder.onPressUp();
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
         if (mounted) setState(() => _showTapFeedback = false);
       });
-      if (duration < widget.settings.dotDurationMs * 2) {
-        await MorseHapticEngine.dot(widget.settings);
+      if (duration < settings.dotDurationMs * 2) {
+        await MorseHapticEngine.dot(settings);
       } else {
-        await MorseHapticEngine.dash(widget.settings);
+        await MorseHapticEngine.dash(settings);
       }
       _resetSilenceTimer();
     }
   }
 
-  Future<void> _unsendLast() async {
-    final repo = context.read<ChatRepository>();
-    // Try the active reply chat first, then fall back to any chat.
-    final chatIds = _replyToChatId != null
-        ? [_replyToChatId!, ..._chatSubs.keys.where((id) => id != _replyToChatId)]
-        : _chatSubs.keys.toList();
-    for (final chatId in chatIds) {
-      final msg = await repo.getLastMyMessage(chatId);
-      if (msg != null) {
-        await repo.deleteMessage(chatId, msg.id);
-        return;
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final hasReplyTarget = _replyToChatId != null;
+    context.watch<MorseSettingsService>();
+    final settings = _settingsSvc.settings;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Listener(
-        onPointerDown: _handlePointerDown,
-        onPointerMove: _handlePointerMove,
-        onPointerUp: _handlePointerUp,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          color: Colors.black,
-          child: StreamBuilder<String>(
-            stream: _tapDecoder.decodedText,
-            initialData: '',
-            builder: (context, decodedSnapshot) {
-              final decodedText = decodedSnapshot.data ?? '';
-              final sendMode = widget.settings.sendMode;
-              final showText =
-                  sendMode == SendMode.text && decodedText.isNotEmpty;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) widget.onExit();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Listener(
+          onPointerDown: _handlePointerDown,
+          onPointerMove: _handlePointerMove,
+          onPointerUp: _handlePointerUp,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            color: Colors.black,
+            child: StreamBuilder<String>(
+              stream: _tapDecoder.decodedText,
+              initialData: '',
+              builder: (context, decodedSnapshot) {
+                final decodedText = decodedSnapshot.data ?? '';
+                final sendMode = settings.sendMode;
+                final showDecodedDraft = sendMode == SendMode.text &&
+                    shouldShowTapDecoderDraft(
+                        decodedText, _exchangeTextBacklog);
 
-              return Stack(
-                children: [
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (_lastReceivedText.isNotEmpty) ...[
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 32),
-                            child: Text(
-                              _lastReceivedText,
-                              style: const TextStyle(
-                                  color: Color(0xFF222222),
-                                  fontSize: 12),
+                return Stack(
+                  children: [
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_exchangeTextBacklog.isNotEmpty) ...[
+                            const Text(
+                              'Messages',
+                              style: TextStyle(
+                                  color: Color(0xFF333333),
+                                  fontSize: 11,
+                              ),
                               textAlign: TextAlign.center,
                             ),
+                            const SizedBox(height: 4),
+                            ConstrainedBox(
+                              constraints:
+                                  const BoxConstraints(maxHeight: 140),
+                              child: ListView.separated(
+                                shrinkWrap: true,
+                                physics: const ClampingScrollPhysics(),
+                                itemCount: _exchangeTextBacklog.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 8),
+                                itemBuilder: (context, i) {
+                                  final line = _exchangeTextBacklog[i];
+                                  final isYou = line.startsWith('You: ');
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 24),
+                                    child: Text(
+                                      line,
+                                      style: TextStyle(
+                                        color: isYou
+                                            ? const Color(0xFF1A3A1A)
+                                            : const Color(0xFF222222),
+                                        fontSize: 12,
+                                        height: 1.25,
+                                        fontStyle: isYou
+                                            ? FontStyle.italic
+                                            : FontStyle.normal,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: _showTapFeedback
+                                  ? const Color(0xFF222222)
+                                  : Colors.black,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 32),
+                          if (showDecodedDraft)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 32),
+                              child: Text(
+                                decodedText,
+                                style: const TextStyle(
+                                    color: Color(0xFF0A0A0A),
+                                    fontSize: 16),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
                         ],
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: _showTapFeedback
-                                ? const Color(0xFF222222)
-                                : Colors.black,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-                        if (showText)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 32),
-                            child: Text(
-                              decodedText,
-                              style: const TextStyle(
-                                  color: Color(0xFF0A0A0A),
-                                  fontSize: 16),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                        left: 16,
-                        right: 16,
-                        bottom: 24,
-                        child: SafeArea(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (hasReplyTarget)
-                                Text(
-                                  'Replying to $_replyToName',
-                                  style: const TextStyle(
-                                      color: Color(0xFF2A2A2A),
-                                      fontSize: 11),
-                                  textAlign: TextAlign.center,
-                                )
-                              else
-                                const Text(
-                                  'Waiting for any friend…',
-                                  style: TextStyle(
-                                      color: Color(0xFF2A2A2A),
-                                      fontSize: 11),
-                                  textAlign: TextAlign.center,
-                                ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Tap • Hold = dash • Swipe ↑ = send • Swipe ↓ = unsend',
-                                style: TextStyle(
-                                    color: Color(0xFF222222),
-                                    fontSize: 10),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 2),
-                              const Text(
-                                'Two fingers = exit',
-                                style: TextStyle(
-                                    color: Color(0xFF222222),
-                                    fontSize: 10),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
-                    ],
-                  );
-            },
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),

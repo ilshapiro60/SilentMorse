@@ -66,7 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildIncomingPushSection(auth),
               const SizedBox(height: 32),
               const Text(
-                'Receive',
+                'Group chats',
                 style: TextStyle(
                   color: dotAmber,
                   fontSize: 14,
@@ -76,51 +76,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'How to receive incoming messages in dark mode',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              RadioListTile<ReceiveMode>(
-                title: const Text(
-                  'Vibrate',
-                  style: TextStyle(color: Colors.white, fontFamily: 'monospace'),
-                ),
-                subtitle: const Text(
-                  'Feel haptic morse pattern',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                value: ReceiveMode.vibrate,
-                groupValue: service.receiveMode,
-                onChanged: (v) => service.setReceiveMode(v!),
-                activeColor: dotAmber,
-              ),
-              RadioListTile<ReceiveMode>(
-                title: const Text(
-                  'Text',
-                  style: TextStyle(color: Colors.white, fontFamily: 'monospace'),
-                ),
-                subtitle: const Text(
-                  'Read decoded message as text',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                value: ReceiveMode.text,
-                groupValue: service.receiveMode,
-                onChanged: (v) => service.setReceiveMode(v!),
-                activeColor: dotAmber,
-              ),
-              const SizedBox(height: 32),
-              const Text(
-                'Send',
-                style: TextStyle(
-                  color: dotAmber,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'What to display when tapping in dark mode',
+                'Name shown when you send from dark mode',
                 style: TextStyle(color: Colors.white70, fontSize: 12),
               ),
               const SizedBox(height: 12),
@@ -139,35 +95,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: const TextStyle(color: Colors.white),
                 onSubmitted: (v) => service.setSenderDisplayName(v),
                 onTapOutside: (_) => service.setSenderDisplayName(_senderController.text),
-              ),
-              const SizedBox(height: 12),
-              RadioListTile<SendMode>(
-                title: const Text(
-                  'Touch',
-                  style: TextStyle(color: Colors.white, fontFamily: 'monospace'),
-                ),
-                subtitle: const Text(
-                  'Tap only — no text on screen',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                value: SendMode.touch,
-                groupValue: service.sendMode,
-                onChanged: (v) => service.setSendMode(v!),
-                activeColor: dotAmber,
-              ),
-              RadioListTile<SendMode>(
-                title: const Text(
-                  'Text',
-                  style: TextStyle(color: Colors.white, fontFamily: 'monospace'),
-                ),
-                subtitle: const Text(
-                  'Decoded text displayed on screen',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                value: SendMode.text,
-                groupValue: service.sendMode,
-                onChanged: (v) => service.setSendMode(v!),
-                activeColor: dotAmber,
               ),
               const SizedBox(height: 32),
               const Text(
@@ -255,8 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 4),
               const Text(
                 'Short tap = dot • Long press = dash'
-                ' • Swipe up = send now'
-                ' • Swipe down = unsend last'
+                ' • Swipe up or down = send now'
                 ' • Two fingers = exit',
                 style: TextStyle(color: Colors.white70, fontSize: 12),
               ),

@@ -46,9 +46,9 @@ class _WatchContactsScreenState extends State<WatchContactsScreen> {
         builder: (context, snapshot) {
           final chats = snapshot.data ?? [];
           if (chats.isEmpty) {
-            return Center(
+            return const Center(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(16),
                 child: Text(
                   'Add contacts on your phone',
                   style: TextStyle(color: Colors.white70, fontSize: 12),
@@ -86,14 +86,10 @@ class _WatchContactsScreenState extends State<WatchContactsScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                subtitle: chat.lastMessage.isNotEmpty
-                    ? Text(
-                        chat.lastMessage,
-                        style: TextStyle(color: Colors.white54, fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    : null,
+                subtitle: const Text(
+                  'Tap to send morse',
+                  style: TextStyle(color: Colors.white38, fontSize: 10),
+                ),
                 onTap: () {
                   Navigator.push(
                     context,

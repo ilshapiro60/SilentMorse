@@ -37,7 +37,6 @@ class _TestScreenState extends State<TestScreen> {
     final settings = context.read<MorseSettingsService>().settings;
     if (_isDarkMode) {
       return TestDarkMode(
-        settings: settings,
         onExit: () => setState(() => _isDarkMode = false),
       );
     }
