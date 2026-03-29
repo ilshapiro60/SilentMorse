@@ -1,6 +1,10 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-feature android:name="android.hardware.type.watch" android:required="false"/>
+    <!-- Merged from `wear` plugin; forces a separate Wear OS Play track. Strip for phone releases. -->
+    <uses-feature
+        android:name="android.hardware.type.watch"
+        tools:node="remove" />
     <application
         android:label="Silent Morse"
         android:name="${applicationName}"
@@ -54,7 +58,7 @@
             android:value="ca-app-pub-9340800466924925~9168712530"/>
         <meta-data
             android:name="com.google.android.wearable.standalone"
-            android:value="true"/>
+            tools:node="remove" />
         <!-- Disable AdMob auto-init ContentProvider; Wear OS has no WebView and crashes otherwise.
              MobileAds.instance.initialize() is called explicitly only on phone from Dart. -->
         <provider
