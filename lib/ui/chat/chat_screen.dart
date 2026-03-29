@@ -48,7 +48,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// Without broom: show only the latest N bubbles. After broom: no cap — only
   /// post-clear messages, all of them (no rolling backlog).
-  static const int _kMaxVisibleMessages = 200;
+  static const int _kMaxVisibleMessages = 50;
 
   final _inputController = TextEditingController();
   /// Reuse one stream per [chatId] so that [StreamBuilder] never resets its
@@ -301,7 +301,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           Tooltip(
             message:
-                'Silent mode: tap = dot, long press = dash, swipe up/down = send; triple-tap = exit',
+                'Silent mode: tap = dot, long press = dash, swipe up/down = send; hold 2s = exit',
             child: IconButton(
               icon: const Icon(Icons.dark_mode_outlined),
               onPressed: () => setState(() => _isDarkScreenActive = true),

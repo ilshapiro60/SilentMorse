@@ -27,6 +27,7 @@ abstract class ChatRepository {
   Future<void> declineChat(String chatId);
   Future<void> deleteChat(String chatId);
   Future<void> deleteMessage(String chatId, String messageId);
+  Future<void> pruneOldMessages(String chatId);
   Future<Message?> getLastMyMessage(String chatId);
   Future<void> addContact(User user);
   Stream<List<Contact>> observeContacts();
@@ -159,6 +160,8 @@ class FirestoreChatRepository extends ChatRepository {
       'lastMessageBy': _myUserId,
       'lastMessageAt': FieldValue.serverTimestamp(),
     });
+    // Fire-and-forget: prune old messages so the collection stays small.
+    pruneOldMessages(chatId);
     return ref.id;
   }
 
@@ -223,6 +226,40 @@ class FirestoreChatRepository extends ChatRepository {
         .get();
     if (snapshot.docs.isEmpty) return null;
     return Message.fromFirestore(snapshot.docs.first);
+  }
+
+  /// Keep only the latest [keep] messages per sender in a chat.
+  /// Deletes older messages from Firestore.
+  static const int _kKeepPerSender = 10;
+
+  Future<void> pruneOldMessages(String chatId) async {
+    final messagesRef =
+        _firestore.collection('chats').doc(chatId).collection('messages');
+    final allDocs = await messagesRef.orderBy('sentAt', descending: true).get();
+
+    final perSender = <String, int>{};
+    final toDelete = <DocumentReference>[];
+
+    for (final doc in allDocs.docs) {
+      final senderId = doc.data()['senderId'] as String? ?? '';
+      final count = perSender[senderId] ?? 0;
+      if (count < _kKeepPerSender) {
+        perSender[senderId] = count + 1;
+      } else {
+        toDelete.add(doc.reference);
+      }
+    }
+
+    if (toDelete.isEmpty) return;
+
+    for (var i = 0; i < toDelete.length; i += 500) {
+      final batch = _firestore.batch();
+      final chunk = toDelete.sublist(i, i + 500 > toDelete.length ? toDelete.length : i + 500);
+      for (final ref in chunk) {
+        batch.delete(ref);
+      }
+      await batch.commit();
+    }
   }
 
   Future<void> markAsRead(String chatId, String messageId) async {

@@ -108,6 +108,9 @@ class MockChatRepository extends ChatRepository {
   Future<void> deleteMessage(String chatId, String messageId) async {}
 
   @override
+  Future<void> pruneOldMessages(String chatId) async {}
+
+  @override
   Future<Message?> getLastMyMessage(String chatId) async => null;
 
   @override

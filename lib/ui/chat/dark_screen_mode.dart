@@ -66,9 +66,8 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   static const double _swipeHorizontalThreshold = 80;
   static const int _kExchangeTextBacklogMax = 10;
 
-  /// Triple-tap to exit: track last 3 tap-up timestamps.
-  final List<int> _tapUpTimestamps = [];
-  static const int _tripleTapWindowMs = 600;
+  Timer? _longPressExitTimer;
+  static const int _longPressExitMs = 2000;
 
   static int _timingSignature(MorseSettings s) =>
       Object.hash(s.dotDurationMs, s.letterGapMs, s.wordGapMs);
@@ -167,6 +166,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     _tapDecoder.dispose();
     _incomingSub?.cancel();
     _silenceTimer?.cancel();
+    _longPressExitTimer?.cancel();
     _resetBrightness();
     GlobalReceiveState.activeDarkModeChatId = null;
     super.dispose();
@@ -215,6 +215,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     if (_activePointers.length >= 2) {
       _tapDecoder.reset();
       _silenceTimer?.cancel();
+      _longPressExitTimer?.cancel();
       _pointerStartY.clear();
       _pointerLastY.clear();
       _pointerStartX.clear();
@@ -228,6 +229,16 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     _pointerStartX[event.pointer] = event.localPosition.dx;
     _pointerLastX[event.pointer] = event.localPosition.dx;
     _tapDecoder.onPressDown();
+    _longPressExitTimer?.cancel();
+    _longPressExitTimer = Timer(
+      const Duration(milliseconds: _longPressExitMs),
+      () {
+        if (!mounted) return;
+        _tapDecoder.reset();
+        _silenceTimer?.cancel();
+        widget.onExit();
+      },
+    );
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
@@ -238,6 +249,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   }
 
   Future<void> _handlePointerUp(PointerUpEvent event) async {
+    _longPressExitTimer?.cancel();
     final startY = _pointerStartY[event.pointer];
     final lastY = _pointerLastY[event.pointer];
     final startX = _pointerStartX[event.pointer];
@@ -257,13 +269,11 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
 
     if (dy.abs() >= _swipeVerticalThreshold) {
       _silenceTimer?.cancel();
-      _tapUpTimestamps.clear();
       final text = _tapDecoder.consumeText();
       if (text.isNotEmpty) {
         _sendOutgoing(text);
       }
     } else if (dx.abs() >= _swipeHorizontalThreshold) {
-      _tapUpTimestamps.clear();
       _tapDecoder.appendSymbol('-');
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
@@ -272,18 +282,6 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
       await MorseHapticEngine.dash(settings);
       _resetSilenceTimer();
     } else {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      _tapUpTimestamps.add(now);
-      if (_tapUpTimestamps.length > 3) _tapUpTimestamps.removeAt(0);
-      if (_tapUpTimestamps.length == 3 &&
-          now - _tapUpTimestamps.first <= _tripleTapWindowMs) {
-        _tapUpTimestamps.clear();
-        _tapDecoder.reset();
-        _silenceTimer?.cancel();
-        widget.onExit();
-        return;
-      }
-
       _tapDecoder.onPressUp();
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
