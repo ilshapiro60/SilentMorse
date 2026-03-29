@@ -9,8 +9,8 @@ const _iosTestBannerId = 'ca-app-pub-3940256099942544/2934735716';
 
 /// Production ad unit IDs. Replace with your IDs from admob.google.com.
 /// Leave empty to use test IDs in production (not recommended for release).
-const _androidProdBannerId = '';
-const _iosProdBannerId = '';
+const _androidProdBannerId = 'ca-app-pub-9340800466924925/8929039382';
+const _iosProdBannerId = 'ca-app-pub-9340800466924925/7000774844';
 
 /// Initializes Google Mobile Ads SDK.
 /// Call from main() before runApp.

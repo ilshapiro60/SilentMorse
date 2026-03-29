@@ -97,16 +97,19 @@ exports.createChat = onCall(async (request) => {
     receiverDoc.data().fcmToken : null;
 
   if (receiverToken) {
-    // Use the default FCM channel so no custom channel registration is needed.
-    await admin.messaging().send({
-      token: receiverToken,
-      notification: {
-        title: "Chat request from " + senderName,
-        body: senderName + " wants to chat silently with you.",
-      },
-      android: {priority: "high"},
-      data: {chatId: chatRef.id, type: "chat_request", senderName},
-    });
+    try {
+      await admin.messaging().send({
+        token: receiverToken,
+        notification: {
+          title: "Chat request from " + senderName,
+          body: senderName + " wants to chat silently with you.",
+        },
+        android: {priority: "high"},
+        data: {chatId: chatRef.id, type: "chat_request", senderName},
+      });
+    } catch (fcmErr) {
+      console.warn("FCM notification failed (stale token?):", fcmErr.message);
+    }
   }
 
   return {chatId: chatRef.id};
@@ -181,15 +184,20 @@ exports.sendMessageNotification = onDocumentCreated(
           chatName: chatLabel,
         };
 
-        await messaging.send({
-          token,
-          notification: {
-            title: notificationTitle,
-            body: notificationBody,
-          },
-          android: {priority: "high"},
-          data,
-        });
+        try {
+          await messaging.send({
+            token,
+            notification: {
+              title: notificationTitle,
+              body: notificationBody,
+            },
+            android: {priority: "high"},
+            data,
+          });
+        } catch (fcmErr) {
+          console.warn(
+              `FCM send to ${recipientId} failed:`, fcmErr.message);
+        }
       });
 
       await Promise.allSettled(sends);
