@@ -59,15 +59,6 @@ android {
     }
 }
 
-dependencies {
-    // The `wear` Flutter plugin references WearableActivityController at
-    // runtime via GeneratedPluginRegistrant. On phone builds the class isn't
-    // provided by the system, so we bundle it. Without this every plugin
-    // registered AFTER wear also fails to load (including vibration, etc.).
-    implementation("com.google.android.wearable:wearable:2.9.0")
-    implementation("com.google.android.support:wearable:2.9.0")
-}
-
 flutter {
     source = "../.."
 }
