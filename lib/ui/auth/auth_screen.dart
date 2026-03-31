@@ -69,6 +69,18 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _signInWithDemo() async {
+    _setLoading(true);
+    try {
+      await context.read<AuthService>().signInWithEmail(
+        'silentmorsedemo@gmail.com',
+        'SilentMorseDemo2026!',
+      );
+    } catch (e) {
+      _setError('Demo sign-in failed: $e');
+    }
+  }
+
   Future<void> _claimUsername(String username) async {
     if (!RegExp(r'^[a-z0-9_]{3,20}$').hasMatch(username)) {
       _setError('Username must be 3-20 chars, lowercase letters, numbers, underscores only');
@@ -144,6 +156,7 @@ class _AuthScreenState extends State<AuthScreen> {
           isLoading: _isLoading,
           onGoogleSignIn: _signInWithGoogle,
           onAppleSignIn: _signInWithApple,
+          onDemoSignIn: _signInWithDemo,
         );
       case AuthStep.setUsername:
         return _SetUsernameStep(
@@ -214,12 +227,14 @@ class _ChooseMethodStep extends StatelessWidget {
   final bool isLoading;
   final VoidCallback onGoogleSignIn;
   final VoidCallback onAppleSignIn;
+  final VoidCallback onDemoSignIn;
 
   const _ChooseMethodStep({
     super.key,
     required this.isLoading,
     required this.onGoogleSignIn,
     required this.onAppleSignIn,
+    required this.onDemoSignIn,
   });
 
   @override
@@ -287,6 +302,17 @@ class _ChooseMethodStep extends StatelessWidget {
               decorationColor: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
             ),
             textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 32),
+        TextButton(
+          onPressed: isLoading ? null : onDemoSignIn,
+          child: Text(
+            'App Review? Sign in with demo account',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
           ),
         ),
       ],

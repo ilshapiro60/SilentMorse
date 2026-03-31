@@ -394,11 +394,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 44,
+                child: OutlinedButton.icon(
+                  onPressed: () => _confirmDeleteAccount(context, auth),
+                  icon: const Icon(Icons.delete_forever, size: 18, color: Colors.redAccent),
+                  label: const Text('Delete Account', style: TextStyle(color: Colors.redAccent)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                    side: const BorderSide(color: Colors.redAccent),
+                  ),
+                ),
+              ),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext context, AuthService auth) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: inkDark,
+        title: const Text('Delete Account?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'This will permanently delete your account and all associated data. '
+          'This action cannot be undone.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+
+    try {
+      await auth.deleteAccount();
+      if (context.mounted) Navigator.of(context).pop();
+    } on fa.FirebaseAuthException catch (e) {
+      if (!context.mounted) return;
+      if (e.code == 'requires-recent-login') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please sign out and sign back in, then try again.'),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete account: ${e.message}')),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete account: $e')),
+      );
+    }
   }
 
   Widget _buildRemoveAdsSection(PurchaseService purchase) {

@@ -139,6 +139,7 @@ class PurchaseService extends ChangeNotifier {
     // State is updated via _onPurchaseUpdate when restore completes
   }
 
+  @override
   void dispose() {
     _subscription?.cancel();
     super.dispose();

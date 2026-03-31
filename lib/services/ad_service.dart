@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -13,8 +14,15 @@ const _androidProdBannerId = 'ca-app-pub-9340800466924925/8929039382';
 const _iosProdBannerId = 'ca-app-pub-9340800466924925/7000774844';
 
 /// Initializes Google Mobile Ads SDK.
-/// Call from main() before runApp.
+/// On iOS, requests App Tracking Transparency authorization first so the
+/// native dialog appears before any tracking data is collected.
 Future<void> initAdMob() async {
+  if (Platform.isIOS) {
+    final status = await AppTrackingTransparency.trackingAuthorizationStatus;
+    if (status == TrackingStatus.notDetermined) {
+      await AppTrackingTransparency.requestTrackingAuthorization();
+    }
+  }
   await MobileAds.instance.initialize();
 }
 

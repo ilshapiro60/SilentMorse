@@ -1,6 +1,7 @@
 /// Entry point for screenshot capture. Uses mocks, no Firebase.
 /// Run: flutter run -t lib/main_screenshot.dart
 /// Or: flutter drive --driver=test_driver/integration_test.dart --target=lib/main_screenshot.dart
+library;
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';

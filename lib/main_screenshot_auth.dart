@@ -1,5 +1,6 @@
 /// Entry point for Auth screen screenshot. No user signed in.
 /// Run: flutter drive --driver=test_driver/integration_test.dart --target=lib/main_screenshot_auth.dart -d <device>
+library;
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';

@@ -223,4 +223,37 @@ class AuthService {
     await _googleSignIn.signOut();
     await _auth.signOut();
   }
+
+  /// Permanently deletes the current user's account and all associated data.
+  /// Firebase may require recent authentication; callers should handle
+  /// [firebase_auth.FirebaseAuthException] with code 'requires-recent-login'.
+  Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('No signed-in user');
+    final uid = user.uid;
+
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (e) {
+      debugPrint('FCM deleteToken (delete): $e');
+    }
+
+    try {
+      await _firestore.collection('users').doc(uid).delete();
+    } catch (e) {
+      debugPrint('Firestore user doc delete: $e');
+    }
+
+    await user.delete();
+    await _googleSignIn.signOut();
+  }
+
+  /// Signs in with email/password. Used for the App Review demo account.
+  Future<void> signInWithEmail(String email, String password) async {
+    final result = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    await _handleSignInResult(result, isGuest: false);
+  }
 }
