@@ -46,21 +46,18 @@ workflows:
         script: flutter pub get
       - name: Set up Android signing
         script: |
+          set +H
           KEYSTORE_PATH="$CM_BUILD_DIR/android/upload-keystore.jks"
-          if [ -n "$CM_KEYSTORE" ]; then
-            echo "$CM_KEYSTORE" | base64 --decode > "$KEYSTORE_PATH"
-          else
-            keytool -genkey -v \
-              -keystore "$KEYSTORE_PATH" \
-              -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 \
-              -alias upload \
-              -dname "CN=Elijah Shapiro, OU=SilentMorse, O=SilentMorse, L=New York, ST=NY, C=US" \
-              -storepass "${CM_KEYSTORE_PASSWORD:-silentmorse2026}" \
-              -keypass "${CM_KEY_PASSWORD:-silentmorse2026}"
+          if [ -z "$CM_KEYSTORE" ]; then
+            echo "ERROR: CM_KEYSTORE not set" && exit 1
           fi
+          if [ -z "$CM_KEYSTORE_PASSWORD" ]; then
+            echo "ERROR: CM_KEYSTORE_PASSWORD not set" && exit 1
+          fi
+          echo "$CM_KEYSTORE" | base64 --decode > "$KEYSTORE_PATH"
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=upload\nstoreFile=%s\n' \
-            "${CM_KEYSTORE_PASSWORD:-silentmorse2026}" \
-            "${CM_KEY_PASSWORD:-silentmorse2026}" \
+            "$CM_KEYSTORE_PASSWORD" \
+            "$CM_KEY_PASSWORD" \
             "$KEYSTORE_PATH" \
             > "$CM_BUILD_DIR/android/key.properties"
       - name: Build AAB
