@@ -3,10 +3,15 @@
 /// Converts raw press/release events into Morse symbols, then letters, then words.
 /// Timing-based: short press = dot, long press = dash.
 /// Callers may also append a dash after a horizontal slide (dark mode).
-/// Silence after a symbol = letter boundary. Longer silence = word boundary.
+///
+/// Letter boundaries are detected at press-down time: if enough silence has
+/// elapsed since the last symbol was appended, the accumulated symbols are
+/// committed as a letter before the new press begins.
 library silentmorse_messenger.util.tap_decoder;
 
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 
 import '../data/models.dart';
 import 'morse_haptic_engine.dart';
@@ -26,17 +31,27 @@ class TapDecoder {
 
   String _currentMorse = '';
   int _pressStartMs = 0;
+  int _lastAppendMs = 0;
   final _currentLetterSymbols = StringBuffer();
   final _fullText = StringBuffer();
   final _currentWord = StringBuffer();
 
-  Timer? _letterGapTimer;
-  Timer? _wordGapTimer;
-
   void onPressDown() {
-    _pressStartMs = DateTime.now().millisecondsSinceEpoch;
-    _letterGapTimer?.cancel();
-    _wordGapTimer?.cancel();
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    if (_lastAppendMs > 0 && _currentLetterSymbols.isNotEmpty) {
+      final gap = now - _lastAppendMs;
+      if (gap >= settings.letterGapMs) {
+        debugPrint('[TapDecoder] letter boundary: gap=${gap}ms');
+        _commitLetter();
+        if (gap >= settings.wordGapMs) {
+          debugPrint('[TapDecoder] word boundary: gap=${gap}ms');
+          _commitWord();
+        }
+      }
+    }
+
+    _pressStartMs = now;
   }
 
   void onPressUp() {
@@ -46,24 +61,15 @@ class TapDecoder {
   }
 
   /// Record a dot or dash (e.g. horizontal slide → dash in dark mode).
-  /// Uses the same letter/word gap timing as [onPressUp].
   void appendSymbol(String symbol) {
     if (symbol != '.' && symbol != '-') return;
 
+    _lastAppendMs = DateTime.now().millisecondsSinceEpoch;
     _currentLetterSymbols.write(symbol);
     _currentMorse = _currentLetterSymbols.toString();
     _currentMorseController.add(_currentMorse);
     _lastSymbolController.add(symbol);
-
-    _letterGapTimer?.cancel();
-    _letterGapTimer = Timer(Duration(milliseconds: settings.letterGapMs), () {
-      _commitLetter();
-      _wordGapTimer?.cancel();
-      _wordGapTimer = Timer(
-        Duration(milliseconds: settings.wordGapMs - settings.letterGapMs),
-        _commitWord,
-      );
-    });
+    _updateDecodedText();
   }
 
   void _commitLetter() {
@@ -78,8 +84,6 @@ class TapDecoder {
     if (decoded.isNotEmpty) {
       _currentWord.write(decoded[0]);
     } else {
-      // Symbols don't match a single character — greedily split into
-      // the longest valid prefixes (handles merged letters like "...---...").
       _greedySplit(morseSymbols);
     }
     _updateDecodedText();
@@ -144,8 +148,6 @@ class TapDecoder {
   }
 
   String consumeText() {
-    _letterGapTimer?.cancel();
-    _wordGapTimer?.cancel();
     _commitLetter();
     _commitWord();
     final result = _fullText.toString();
@@ -154,20 +156,17 @@ class TapDecoder {
   }
 
   void reset() {
-    _letterGapTimer?.cancel();
-    _wordGapTimer?.cancel();
     _currentLetterSymbols.clear();
     _currentWord.clear();
     _fullText.clear();
     _currentMorse = '';
+    _lastAppendMs = 0;
     _decodedTextController.add('');
     _currentMorseController.add('');
     _lastSymbolController.add(null);
   }
 
   void dispose() {
-    _letterGapTimer?.cancel();
-    _wordGapTimer?.cancel();
     _decodedTextController.close();
     _currentMorseController.close();
     _lastSymbolController.close();
