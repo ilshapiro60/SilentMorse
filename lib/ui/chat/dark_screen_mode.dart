@@ -62,7 +62,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   final Map<int, double> _pointerStartX = {};
   final Map<int, double> _pointerLastX = {};
 
-  static const double _swipeVerticalThreshold = 40;
+  static const double _swipeVerticalThreshold = 20;
   static const double _swipeHorizontalThreshold = 80;
   static const int _kExchangeTextBacklogMax = 10;
 
@@ -285,11 +285,19 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     final settings = _settingsSvc.settings;
 
     if (dy.abs() >= _swipeVerticalThreshold) {
+      debugPrint('[DarkMode] swipe detected dy=$dy, sending...');
       _silenceTimer?.cancel();
       final text = _tapDecoder.consumeText();
+      debugPrint('[DarkMode] consumeText="$text"');
       if (text.isNotEmpty) {
         _sendOutgoing(text);
+        await MorseHapticEngine.dot(settings);
+        await Future.delayed(const Duration(milliseconds: 80));
+        await MorseHapticEngine.dot(settings);
+      } else {
+        debugPrint('[DarkMode] nothing to send (auto-send may have fired already)');
       }
+      return;
     } else if (dx.abs() >= _swipeHorizontalThreshold) {
       _tapDecoder.appendSymbol('-');
       setState(() => _showTapFeedback = true);
