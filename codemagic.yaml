@@ -47,23 +47,13 @@ workflows:
       - name: Set up Android signing
         script: |
           KEYSTORE_PATH="$CM_BUILD_DIR/android/upload-keystore.jks"
-          STORE_PASS="SilentMorse2026K"
-          keytool -genkey -v \
-            -keystore "$KEYSTORE_PATH" \
-            -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 \
-            -alias upload \
-            -dname "CN=Elijah Shapiro, OU=SilentMorse, O=SilentMorse, L=New York, ST=NY, C=US" \
-            -storepass "$STORE_PASS" \
-            -keypass "$STORE_PASS"
-          echo "=== NEW KEYSTORE SHA1 ==="
-          keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$STORE_PASS" | grep SHA1
-          echo "========================="
-          keytool -exportcert -alias upload -keystore "$KEYSTORE_PATH" \
-            -storepass "$STORE_PASS" -rfc \
-            > "$CM_BUILD_DIR/android/upload_certificate.pem"
+          if [ -z "$CM_KEYSTORE" ]; then
+            echo "ERROR: CM_KEYSTORE not set" && exit 1
+          fi
+          echo "$CM_KEYSTORE" | base64 --decode > "$KEYSTORE_PATH"
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=upload\nstoreFile=%s\n' \
-            "$STORE_PASS" \
-            "$STORE_PASS" \
+            "$CM_KEYSTORE_PASSWORD" \
+            "$CM_KEY_PASSWORD" \
             "$KEYSTORE_PATH" \
             > "$CM_BUILD_DIR/android/key.properties"
       - name: Build AAB
