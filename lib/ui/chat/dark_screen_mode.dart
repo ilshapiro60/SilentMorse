@@ -297,7 +297,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
         debugPrint('[DarkMode] nothing to send');
       }
       return;
-    } else if (isSwipe && dx.abs() >= _swipeHorizontalThreshold) {
+    } else if (dx.abs() >= _swipeHorizontalThreshold) {
       _tapDecoder.appendSymbol('-');
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
