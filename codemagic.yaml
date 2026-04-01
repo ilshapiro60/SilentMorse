@@ -46,26 +46,21 @@ workflows:
         script: flutter pub get
       - name: Set up Android signing
         script: |
-          set +H
           KEYSTORE_PATH="$CM_BUILD_DIR/android/upload-keystore.jks"
-          if [ -z "$CM_KEYSTORE" ]; then
-            echo "ERROR: CM_KEYSTORE not set" && exit 1
-          fi
-          if [ -z "$CM_KEYSTORE_PASSWORD" ]; then
-            echo "ERROR: CM_KEYSTORE_PASSWORD not set" && exit 1
-          fi
-          echo "$CM_KEYSTORE" | base64 --decode > "$KEYSTORE_PATH"
-          echo "Keystore size: $(wc -c < "$KEYSTORE_PATH") bytes"
-          echo "Password length: ${#CM_KEYSTORE_PASSWORD} chars"
-          echo "Key password length: ${#CM_KEY_PASSWORD} chars"
-          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$CM_KEYSTORE_PASSWORD" || {
-            echo "ERROR: Password verification failed. Trying alias list..."
-            keytool -list -keystore "$KEYSTORE_PATH" -storepass "$CM_KEYSTORE_PASSWORD" -v 2>&1 | head -5
-            exit 1
-          }
+          STORE_PASS="SilentMorse2026K"
+          keytool -genkey -v \
+            -keystore "$KEYSTORE_PATH" \
+            -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias upload \
+            -dname "CN=Elijah Shapiro, OU=SilentMorse, O=SilentMorse, L=New York, ST=NY, C=US" \
+            -storepass "$STORE_PASS" \
+            -keypass "$STORE_PASS"
+          echo "=== NEW KEYSTORE SHA1 ==="
+          keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$STORE_PASS" | grep SHA1
+          echo "========================="
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=upload\nstoreFile=%s\n' \
-            "$CM_KEYSTORE_PASSWORD" \
-            "$CM_KEY_PASSWORD" \
+            "$STORE_PASS" \
+            "$STORE_PASS" \
             "$KEYSTORE_PATH" \
             > "$CM_BUILD_DIR/android/key.properties"
       - name: Build AAB
