@@ -55,6 +55,14 @@ workflows:
             echo "ERROR: CM_KEYSTORE_PASSWORD not set" && exit 1
           fi
           echo "$CM_KEYSTORE" | base64 --decode > "$KEYSTORE_PATH"
+          echo "Keystore size: $(wc -c < "$KEYSTORE_PATH") bytes"
+          echo "Password length: ${#CM_KEYSTORE_PASSWORD} chars"
+          echo "Key password length: ${#CM_KEY_PASSWORD} chars"
+          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$CM_KEYSTORE_PASSWORD" || {
+            echo "ERROR: Password verification failed. Trying alias list..."
+            keytool -list -keystore "$KEYSTORE_PATH" -storepass "$CM_KEYSTORE_PASSWORD" -v 2>&1 | head -5
+            exit 1
+          }
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=upload\nstoreFile=%s\n' \
             "$CM_KEYSTORE_PASSWORD" \
             "$CM_KEY_PASSWORD" \
