@@ -31,7 +31,7 @@ You can remove all ads permanently through an in-app purchase.
 
 5. DATA STORAGE
 
-Your data is stored on Firebase (Google Cloud) servers. Messages are stored until you or the recipient deletes them, or you delete your account.
+Your data is stored on Firebase (Google Cloud) servers. Conversations are automatically pruned to keep them lightweight — Silent Morse is not designed for long-term message storage. You may delete your account at any time through the App settings, which removes your account data from our systems.
 
 6. THIRD-PARTY SERVICES
 
