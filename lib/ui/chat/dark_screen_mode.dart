@@ -249,6 +249,19 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
       _pointerLastY[event.pointer] = event.localPosition.dy;
       _pointerLastX[event.pointer] = event.localPosition.dx;
     }
+    // Cancel exit timer if finger is clearly moving (it's a swipe, not a hold)
+    if (_longPressExitTimer != null) {
+      final startY = _pointerStartY[event.pointer];
+      final startX = _pointerStartX[event.pointer];
+      if (startY != null && startX != null) {
+        final dy = (event.localPosition.dy - startY).abs();
+        final dx = (event.localPosition.dx - startX).abs();
+        if (dy > 15 || dx > 15) {
+          _longPressExitTimer?.cancel();
+          _longPressExitTimer = null;
+        }
+      }
+    }
   }
 
   Future<void> _handlePointerUp(PointerUpEvent event) async {
