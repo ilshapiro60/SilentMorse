@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart' hide User;
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../data/models.dart';
+import '../util/content_filter.dart';
 import '../util/morse_haptic_engine.dart';
 
 /// Base class for chat data. [FirestoreChatRepository] is the real impl;
@@ -33,6 +34,9 @@ abstract class ChatRepository {
   Stream<List<Contact>> observeContacts();
   Future<User?> findUserByUsername(String username);
   Future<List<User>> findUsersByDisplayName(String query);
+  Future<void> blockUser(String targetUserId, String? chatId);
+  Future<void> reportUser(String targetUserId, String? chatId, String reason);
+  Stream<List<String>> observeBlockedUsers();
 }
 
 class FirestoreChatRepository extends ChatRepository {
@@ -52,11 +56,23 @@ class FirestoreChatRepository extends ChatRepository {
         .collection('chats')
         .where('participants', arrayContains: _myUserId)
         .snapshots()
-        .map((snapshot) {
-          final chats =
-              snapshot.docs.map((d) => Chat.fromFirestore(d)).toList();
-          // Sort newest-first client-side to avoid a composite index requirement
-          // and to handle chats where lastMessageAt is null.
+        .asyncMap((snapshot) async {
+          final blockedSnap = await _firestore
+              .collection('users')
+              .doc(_myUserId)
+              .collection('blockedUsers')
+              .get();
+          final blockedIds = blockedSnap.docs.map((d) => d.id).toSet();
+
+          final chats = snapshot.docs
+              .map((d) => Chat.fromFirestore(d))
+              .where((chat) {
+                if (chat.isGroup) return true;
+                final other = chat.otherParticipant(_myUserId);
+                return !blockedIds.contains(other);
+              })
+              .toList();
+
           chats.sort((a, b) {
             final ta = a.lastMessageAt;
             final tb = b.lastMessageAt;
@@ -139,10 +155,11 @@ class FirestoreChatRepository extends ChatRepository {
     String? senderDisplayName,
     void Function(String messageId)? onMessageId,
   }) async {
-    final morse = MorseHapticEngine.textToMorse(text);
+    final filtered = filterProfanity(text);
+    final morse = MorseHapticEngine.textToMorse(filtered);
     final data = <String, dynamic>{
       'senderId': _myUserId,
-      'text': text,
+      'text': filtered,
       'morse': morse,
       'inputMode': inputMode.name.toUpperCase(),
       'sentAt': FieldValue.serverTimestamp(),
@@ -156,7 +173,7 @@ class FirestoreChatRepository extends ChatRepository {
     onMessageId?.call(ref.id);
     await ref.set(data);
     await _firestore.collection('chats').doc(chatId).update({
-      'lastMessage': text,
+      'lastMessage': filtered,
       'lastMessageBy': _myUserId,
       'lastMessageAt': FieldValue.serverTimestamp(),
     });
@@ -232,6 +249,7 @@ class FirestoreChatRepository extends ChatRepository {
   /// Deletes older messages from Firestore.
   static const int _kKeepPerSender = 10;
 
+  @override
   Future<void> pruneOldMessages(String chatId) async {
     final messagesRef =
         _firestore.collection('chats').doc(chatId).collection('messages');
@@ -358,5 +376,36 @@ class FirestoreChatRepository extends ChatRepository {
 
   Future<void> updateFcmToken(String token) async {
     await _firestore.collection('users').doc(_myUserId).update({'fcmToken': token});
+  }
+
+  // ─────────────────────────────────────────────
+  // BLOCK & REPORT
+  // ─────────────────────────────────────────────
+
+  @override
+  Future<void> blockUser(String targetUserId, String? chatId) async {
+    await _functions.httpsCallable('blockUser').call({
+      'targetUserId': targetUserId,
+      if (chatId != null) 'chatId': chatId,
+    });
+  }
+
+  @override
+  Future<void> reportUser(String targetUserId, String? chatId, String reason) async {
+    await _functions.httpsCallable('reportContent').call({
+      'targetUserId': targetUserId,
+      'reason': reason,
+      if (chatId != null) 'chatId': chatId,
+    });
+  }
+
+  @override
+  Stream<List<String>> observeBlockedUsers() {
+    return _firestore
+        .collection('users')
+        .doc(_myUserId)
+        .collection('blockedUsers')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.id).toList());
   }
 }

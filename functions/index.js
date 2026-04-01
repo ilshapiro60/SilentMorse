@@ -116,6 +116,73 @@ exports.createChat = onCall(async (request) => {
 });
 
 // ─────────────────────────────────────────────
+// blockUser — add to blockedUsers sub-collection
+// ─────────────────────────────────────────────
+
+exports.blockUser = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const myUserId = request.auth.uid;
+  const targetUserId = request.data.targetUserId;
+  const chatId = request.data.chatId || null;
+
+  if (!targetUserId || typeof targetUserId !== "string") {
+    throw new HttpsError("invalid-argument", "targetUserId is required.");
+  }
+  if (myUserId === targetUserId) {
+    throw new HttpsError("invalid-argument", "Cannot block yourself.");
+  }
+
+  const db = admin.firestore();
+
+  await db
+      .collection("users")
+      .doc(myUserId)
+      .collection("blockedUsers")
+      .doc(targetUserId)
+      .set({
+        blockedAt: admin.firestore.FieldValue.serverTimestamp(),
+        chatId: chatId,
+      });
+
+  return {success: true};
+});
+
+// ─────────────────────────────────────────────
+// reportContent — create a report document
+// ─────────────────────────────────────────────
+
+exports.reportContent = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const reporterId = request.auth.uid;
+  const targetUserId = request.data.targetUserId;
+  const reason = request.data.reason || "";
+  const chatId = request.data.chatId || null;
+
+  if (!targetUserId || typeof targetUserId !== "string") {
+    throw new HttpsError("invalid-argument", "targetUserId is required.");
+  }
+
+  const db = admin.firestore();
+
+  await db.collection("reports").add({
+    reporterId,
+    targetUserId,
+    chatId,
+    reason,
+    status: "PENDING",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return {success: true};
+});
+
+// ─────────────────────────────────────────────
 // sendMessageNotification — notify receiver on new message
 // ─────────────────────────────────────────────
 
@@ -172,6 +239,15 @@ exports.sendMessageNotification = onDocumentCreated(
         if (userDoc.data().receiveIncoming === false) return;
         const token = userDoc.data().fcmToken;
         if (!token) return;
+
+        // Skip notification if recipient has blocked the sender
+        const blockedDoc = await db
+            .collection("users")
+            .doc(recipientId)
+            .collection("blockedUsers")
+            .doc(senderId)
+            .get();
+        if (blockedDoc.exists) return;
 
         const data = {
           chatId,

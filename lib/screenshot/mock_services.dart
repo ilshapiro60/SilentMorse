@@ -124,4 +124,13 @@ class MockChatRepository extends ChatRepository {
 
   @override
   Future<List<User>> findUsersByDisplayName(String query) async => [];
+
+  @override
+  Future<void> blockUser(String targetUserId, String? chatId) async {}
+
+  @override
+  Future<void> reportUser(String targetUserId, String? chatId, String reason) async {}
+
+  @override
+  Stream<List<String>> observeBlockedUsers() => Stream.value([]);
 }

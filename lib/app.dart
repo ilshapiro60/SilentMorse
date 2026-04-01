@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/models.dart' hide User;
 import 'services/auth_service.dart';
@@ -12,6 +14,7 @@ import 'services/morse_settings_service.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/contacts/contacts_screen.dart';
 import 'ui/chat/chat_screen.dart';
+import 'ui/theme/silentmorse_theme.dart';
 import 'util/morse_haptic_engine.dart';
 
 /// Tracks which chat is currently open so the foreground FCM listener can skip
@@ -143,8 +146,158 @@ class _AppRouterState extends State<AppRouter> {
           return const AuthScreen();
         }
 
-        return const ContactsScreen();
+        return const _EulaGate();
       },
+    );
+  }
+}
+
+class _EulaGate extends StatefulWidget {
+  const _EulaGate();
+
+  @override
+  State<_EulaGate> createState() => _EulaGateState();
+}
+
+class _EulaGateState extends State<_EulaGate> {
+  static const _prefsKey = 'eula_accepted_v1';
+  bool? _accepted;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAccepted();
+  }
+
+  Future<void> _checkAccepted() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() => _accepted = prefs.getBool(_prefsKey) ?? false);
+    }
+  }
+
+  Future<void> _accept() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsKey, true);
+    if (mounted) setState(() => _accepted = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_accepted == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_accepted!) return const ContactsScreen();
+    return _EulaScreen(onAccept: _accept);
+  }
+}
+
+class _EulaScreen extends StatefulWidget {
+  final VoidCallback onAccept;
+  const _EulaScreen({required this.onAccept});
+
+  @override
+  State<_EulaScreen> createState() => _EulaScreenState();
+}
+
+class _EulaScreenState extends State<_EulaScreen> {
+  String _tosText = '';
+  bool _scrolledToEnd = false;
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTos();
+    _scrollController.addListener(_onScroll);
+  }
+
+  Future<void> _loadTos() async {
+    final text = await rootBundle.loadString('assets/legal/terms_of_service.txt');
+    if (mounted) setState(() => _tosText = text);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 40) {
+      if (!_scrolledToEnd && mounted) {
+        setState(() => _scrolledToEnd = true);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: inkBlack,
+      appBar: AppBar(
+        backgroundColor: inkDark,
+        foregroundColor: Colors.white,
+        title: const Text('Terms of Service',
+            style: TextStyle(fontFamily: 'monospace')),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: _tosText.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : Scrollbar(
+                    controller: _scrollController,
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        _tosText,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+          Container(
+            color: inkDark,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            child: Column(
+              children: [
+                const Text(
+                  'By tapping "I Agree" you accept the Terms of Service '
+                  'and agree to follow the content guidelines.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    onPressed: _scrolledToEnd ? widget.onAccept : null,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: dotAmber,
+                      foregroundColor: Colors.black,
+                      disabledBackgroundColor: Colors.white12,
+                      disabledForegroundColor: Colors.white38,
+                    ),
+                    child: Text(_scrolledToEnd
+                        ? 'I Agree'
+                        : 'Scroll to read all terms'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -8,6 +8,7 @@ import '../../data/models.dart' as models;
 import '../../services/auth_service.dart';
 import '../../services/chat_repository.dart';
 import '../../services/morse_settings_service.dart';
+import '../theme/silentmorse_theme.dart';
 import 'dark_screen_mode.dart';
 import 'telegraph_chat_theme.dart';
 
@@ -179,6 +180,115 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _onMenuAction(String action, ChatRepository repo, String myUserId) async {
+    final chatSnap = await FirebaseFirestore.instance
+        .collection('chats')
+        .doc(widget.chatId)
+        .get();
+    final participants =
+        List<String>.from(chatSnap.data()?['participants'] ?? []);
+    final targetUserId =
+        participants.where((id) => id != myUserId).firstOrNull ?? '';
+    if (targetUserId.isEmpty) return;
+
+    if (action == 'block') {
+      if (!mounted) return;
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: inkDark,
+          title: const Text('Block User?',
+              style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'This user will no longer be able to send you messages or '
+            'notifications. Their chats will be hidden from your list.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: Colors.white70)),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white),
+              child: const Text('Block'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+      await repo.blockUser(targetUserId, widget.chatId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User blocked')),
+        );
+        Navigator.of(context).pop();
+      }
+    } else if (action == 'report') {
+      if (!mounted) return;
+      final reason = await showDialog<String>(
+        context: context,
+        builder: (ctx) {
+          final controller = TextEditingController();
+          return AlertDialog(
+            backgroundColor: inkDark,
+            title: const Text('Report User',
+                style: TextStyle(color: Colors.white)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Please describe why you are reporting this user. '
+                  'We will review your report.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  maxLines: 3,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Reason for reporting...',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    filled: true,
+                    fillColor: inkSurface,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel',
+                    style: TextStyle(color: Colors.white70)),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                style: FilledButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white),
+                child: const Text('Report'),
+              ),
+            ],
+          );
+        },
+      );
+      if (reason == null || reason.isEmpty || !mounted) return;
+      await repo.reportUser(targetUserId, widget.chatId, reason);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report submitted — thank you')),
+        );
+      }
+    }
+  }
+
   bool _passesBroomFilter(models.Message m, DateTime? clearedAt) {
     if (_broomBypassIds.contains(m.id)) return true;
     if (clearedAt == null) return true;
@@ -306,6 +416,30 @@ class _ChatScreenState extends State<ChatScreen> {
               icon: const Icon(Icons.dark_mode_outlined),
               onPressed: () => setState(() => _isDarkScreenActive = true),
             ),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) => _onMenuAction(value, repo, myUserId),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'block',
+                child: ListTile(
+                  leading: Icon(Icons.block, color: Colors.orange),
+                  title: Text('Block User'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'report',
+                child: ListTile(
+                  leading: Icon(Icons.flag, color: Colors.redAccent),
+                  title: Text('Report'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),

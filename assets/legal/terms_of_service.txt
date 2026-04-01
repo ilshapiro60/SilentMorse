@@ -1,6 +1,6 @@
 TERMS OF SERVICE
 
-Last updated: March 9, 2006
+Last updated: March 31, 2026
 
 1. ACCEPTANCE OF TERMS
 
@@ -21,35 +21,52 @@ Silent Morse is a messaging application that enables communication using Morse c
 
 You agree not to:
 • Use the App for any illegal purpose or in violation of any laws.
-• Harass, abuse, or harm other users.
+• Harass, abuse, threaten, or harm other users.
 • Send spam, malware, or harmful content.
 • Impersonate another person or entity.
 • Attempt to gain unauthorized access to the App or other users' accounts.
+• Post or transmit any content that is obscene, defamatory, discriminatory, or otherwise objectionable.
+• Use the App to promote violence, hatred, or illegal activities.
+• Circumvent or attempt to bypass any content moderation or filtering systems.
 
-5. USER CONTENT
+5. USER-GENERATED CONTENT
 
-You retain ownership of messages you send. By sending messages, you grant us a limited license to store, transmit, and display them as necessary to provide the service. We do not claim ownership of your content.
+a) You retain ownership of messages you send. By sending messages, you grant us a limited license to store, transmit, and display them as necessary to provide the service. We do not claim ownership of your content.
 
-6. PRIVACY
+b) You are solely responsible for the content you transmit. You agree not to send content that is illegal, harmful, threatening, abusive, harassing, defamatory, vulgar, obscene, hateful, or racially, ethnically, or otherwise objectionable.
+
+c) We reserve the right (but have no obligation) to review, filter, or remove user content that violates these Terms, at our sole discretion and without prior notice.
+
+d) We may employ automated content filtering to detect and mask profanity or offensive language. Attempts to circumvent these filters are a violation of these Terms.
+
+e) Other users may report content they believe violates these Terms. Reported content may be reviewed and actioned at our discretion.
+
+6. BLOCKING AND REPORTING
+
+• You may block any user at any time. Blocked users will be unable to send you messages or notifications.
+• You may report users or content that violates these Terms. We will review reports and may take action including content removal, warnings, or account suspension/termination.
+• Abuse of the reporting system (e.g. frivolous or malicious reports) is itself a violation of these Terms.
+
+7. PRIVACY
 
 Your use of the App is also governed by our Privacy Policy. Please review it in the Legal section of this app.
 
-7. TERMINATION
+8. TERMINATION
 
-We may suspend or terminate your account if you violate these Terms. You may delete your account at any time through the App settings.
+We may suspend or terminate your account if you violate these Terms. You may delete your account at any time through the App settings. Accounts with repeated violations of the content guidelines may be permanently banned.
 
-8. DISCLAIMER
+9. DISCLAIMER
 
 THE APP IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 
-9. LIMITATION OF LIABILITY
+10. LIMITATION OF LIABILITY
 
 TO THE MAXIMUM EXTENT PERMITTED BY LAW, WE SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES ARISING FROM YOUR USE OF THE APP.
 
-10. CHANGES
+11. CHANGES
 
 We may update these Terms from time to time. We will notify you of material changes. Continued use of the App after changes constitutes acceptance.
 
-11. CONTACT
+12. CONTACT
 
 For questions about these Terms, contact us at il_shapiro@hotmail.com.
