@@ -58,6 +58,9 @@ workflows:
           echo "=== NEW KEYSTORE SHA1 ==="
           keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$STORE_PASS" | grep SHA1
           echo "========================="
+          keytool -exportcert -alias upload -keystore "$KEYSTORE_PATH" \
+            -storepass "$STORE_PASS" -rfc \
+            > "$CM_BUILD_DIR/android/upload_certificate.pem"
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=upload\nstoreFile=%s\n' \
             "$STORE_PASS" \
             "$STORE_PASS" \
@@ -68,3 +71,4 @@ workflows:
     artifacts:
       - build/app/outputs/bundle/release/*.aab
       - android/upload-keystore.jks
+      - android/upload_certificate.pem
