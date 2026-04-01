@@ -67,6 +67,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   static const int _kExchangeTextBacklogMax = 10;
 
   Timer? _longPressExitTimer;
+  bool _exiting = false;
   static const int _longPressExitMs = 2000;
 
   static int _timingSignature(MorseSettings s) =>
@@ -213,6 +214,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   void _handlePointerDown(PointerDownEvent event) {
     _activePointers.add(event.pointer);
     if (_activePointers.length >= 2) {
+      _exiting = true;
       _tapDecoder.reset();
       _silenceTimer?.cancel();
       _longPressExitTimer?.cancel();
@@ -234,6 +236,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
       const Duration(milliseconds: _longPressExitMs),
       () {
         if (!mounted) return;
+        _exiting = true;
         _tapDecoder.reset();
         _silenceTimer?.cancel();
         widget.onExit();
@@ -250,6 +253,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
 
   Future<void> _handlePointerUp(PointerUpEvent event) async {
     _longPressExitTimer?.cancel();
+    if (_exiting) return;
     final startY = _pointerStartY[event.pointer];
     final lastY = _pointerLastY[event.pointer];
     final startX = _pointerStartX[event.pointer];
