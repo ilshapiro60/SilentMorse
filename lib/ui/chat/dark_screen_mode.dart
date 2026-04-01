@@ -180,10 +180,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   }
 
   void _resetSilenceTimer() {
-    final delayMs = _settingsSvc.settings.autoSendDelayMs;
-    if (delayMs <= 0) return;
-    _silenceTimer?.cancel();
-    _silenceTimer = Timer(Duration(milliseconds: delayMs), _autoSend);
+    // Auto-send disabled: messages only send on explicit swipe up/down.
   }
 
   void _appendExchangeLine(String line) {
