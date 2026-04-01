@@ -62,7 +62,7 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   final Map<int, double> _pointerStartX = {};
   final Map<int, double> _pointerLastX = {};
 
-  static const double _swipeVerticalThreshold = 80;
+  static const double _swipeVerticalThreshold = 40;
   static const double _swipeHorizontalThreshold = 80;
   static const int _kExchangeTextBacklogMax = 10;
 
