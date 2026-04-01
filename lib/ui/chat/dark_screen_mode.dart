@@ -62,8 +62,9 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
   final Map<int, double> _pointerStartX = {};
   final Map<int, double> _pointerLastX = {};
 
-  static const double _swipeVerticalThreshold = 20;
-  static const double _swipeHorizontalThreshold = 80;
+  static const double _swipeVerticalThreshold = 60;
+  static const double _swipeHorizontalThreshold = 60;
+  static const int _minSwipeDurationMs = 120;
   static const int _kExchangeTextBacklogMax = 10;
 
   Timer? _longPressExitTimer;
@@ -281,8 +282,9 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     final dx = startX != null ? endX - startX : 0.0;
     final settings = _settingsSvc.settings;
 
-    if (dy.abs() >= _swipeVerticalThreshold) {
-      debugPrint('[DarkMode] swipe detected dy=$dy, sending...');
+    final isSwipe = duration >= _minSwipeDurationMs;
+    if (isSwipe && dy.abs() >= _swipeVerticalThreshold) {
+      debugPrint('[DarkMode] swipe-send dy=$dy dur=${duration}ms');
       _silenceTimer?.cancel();
       final text = _tapDecoder.consumeText();
       debugPrint('[DarkMode] consumeText="$text"');
@@ -292,10 +294,10 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
         await Future.delayed(const Duration(milliseconds: 80));
         await MorseHapticEngine.dot(settings);
       } else {
-        debugPrint('[DarkMode] nothing to send (auto-send may have fired already)');
+        debugPrint('[DarkMode] nothing to send');
       }
       return;
-    } else if (dx.abs() >= _swipeHorizontalThreshold) {
+    } else if (isSwipe && dx.abs() >= _swipeHorizontalThreshold) {
       _tapDecoder.appendSymbol('-');
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
@@ -305,11 +307,13 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
       _resetSilenceTimer();
     } else {
       _tapDecoder.onPressUp();
+      final symbol = duration < settings.dotDurationMs * 2 ? '.' : '-';
+      debugPrint('[DarkMode] tap: $symbol (${duration}ms, dy=${dy.toStringAsFixed(0)})');
       setState(() => _showTapFeedback = true);
       Future.delayed(const Duration(milliseconds: 50), () {
         if (mounted) setState(() => _showTapFeedback = false);
       });
-      if (duration < settings.dotDurationMs * 2) {
+      if (symbol == '.') {
         await MorseHapticEngine.dot(settings);
       } else {
         await MorseHapticEngine.dash(settings);
