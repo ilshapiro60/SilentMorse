@@ -14,6 +14,18 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Blocked users: only the owner can read; writes via Cloud Function only
+    match /users/{userId}/blockedUsers/{blockedId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // Reports: authenticated users can create; reads restricted to admin/Cloud Functions
+    match /reports/{reportId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+
     // Chats: only participants can read/write
     match /chats/{chatId} {
       allow read, update: if request.auth != null
