@@ -1,6 +1,6 @@
 PRIVACY POLICY
 
-Last updated: [DATE]
+Last updated: March 31, 2026
 
 1. INTRODUCTION
 
@@ -9,34 +9,50 @@ Silent Morse ("we," "our," or "the App") respects your privacy. This policy desc
 2. INFORMATION WE COLLECT
 
 • Account information: When you sign in with Google or Apple, we receive your name, email (if provided), and a unique identifier.
-• Messages: The content of messages you send and receive is stored to deliver the service.
-• Device information: We may collect device type and app version for troubleshooting.
-• Usage data: We may collect how you interact with the App to improve the service.
+• Messages: The content of messages you send and receive is stored in Firebase to deliver the service.
+• Device token: We store your Firebase Cloud Messaging (FCM) token to deliver push notifications.
+• User reports: If you report another user or content, the report details are stored for moderation purposes.
 
-3. HOW WE USE YOUR INFORMATION
+3. ADVERTISING
+
+Silent Morse displays ads via Google AdMob. AdMob may collect device identifiers and usage data to serve relevant ads. On iOS, we request your permission via App Tracking Transparency (ATT) before any tracking occurs. You may decline and still use the app normally.
+
+You can remove all ads permanently through an in-app purchase.
+
+4. HOW WE USE YOUR INFORMATION
 
 • To provide and maintain the messaging service
 • To authenticate your identity
 • To allow other users to find you (by username or display name)
-• To improve the App and fix issues
+• To display advertisements (via Google AdMob)
+• To deliver push notifications for incoming messages
+• To moderate content and enforce our Terms of Service
 • To comply with legal obligations
 
-4. DATA STORAGE
+5. DATA STORAGE
 
 Your data is stored on Firebase (Google Cloud) servers. Messages are stored until you or the recipient deletes them, or you delete your account.
 
-5. DATA SHARING
+6. THIRD-PARTY SERVICES
+
+• Firebase (Google LLC) — authentication, database, cloud functions, push notifications
+• Google AdMob (Google LLC) — advertising
+• Google Sign-In / Apple Sign-In — authentication handled by these providers
+
+These services are governed by their own privacy policies. See https://policies.google.com/privacy for Google services.
+
+7. DATA SHARING
 
 We do not sell your personal information. We may share data:
 • With other users as necessary for the messaging feature (e.g., your display name, messages)
-• With service providers (e.g., Firebase) who help us operate the App
+• With service providers (Firebase, AdMob) who help us operate the App
 • When required by law or to protect our rights
 
-6. SECURITY
+8. SECURITY
 
 We use industry-standard security measures including encryption in transit. However, no method of transmission over the internet is 100% secure.
 
-7. YOUR RIGHTS
+9. YOUR RIGHTS
 
 Depending on your location, you may have the right to:
 • Access your personal data
@@ -45,16 +61,16 @@ Depending on your location, you may have the right to:
 • Export your data
 • Opt out of certain processing
 
-To exercise these rights, contact us at [YOUR_EMAIL] or delete your account through the App.
+To exercise these rights, contact us at il_shapiro@hotmail.com or delete your account through the App settings.
 
-8. CHILDREN'S PRIVACY
+10. CHILDREN'S PRIVACY
 
 The App is not intended for users under 13. We do not knowingly collect data from children under 13.
 
-9. CHANGES
+11. CHANGES
 
 We may update this policy from time to time. We will notify you of material changes. Continued use after changes constitutes acceptance.
 
-10. CONTACT
+12. CONTACT
 
-For privacy questions, contact us at [YOUR_EMAIL].
+For privacy questions, contact us at il_shapiro@hotmail.com.

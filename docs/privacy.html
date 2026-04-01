@@ -9,6 +9,7 @@
     h1 { font-size: 2em; margin-bottom: 4px; }
     h2 { font-size: 1.2em; margin-top: 2em; color: #333; }
     p, li { font-size: 1em; }
+    ul { padding-left: 1.4em; }
     a { color: #0070f3; }
     footer { margin-top: 3em; font-size: 0.85em; color: #888; }
   </style>
@@ -17,38 +18,57 @@
   <h1>Privacy Policy</h1>
   <p><strong>App:</strong> Silent Morse<br>
      <strong>Developer:</strong> Ilya Shapiro<br>
-     <strong>Effective date:</strong> March 28, 2026</p>
+     <strong>Effective date:</strong> March 31, 2026</p>
 
   <h2>Overview</h2>
   <p>Silent Morse is a haptic Morse code messenger. We are committed to protecting your privacy. This policy explains what data the app handles and how it is managed.</p>
 
-  <h2>Data We Do Not Collect</h2>
-  <p>Silent Morse does not collect, store, sell, or share any personal information. We do not use analytics, advertising SDKs, or tracking of any kind. No personally identifiable information ever leaves your device to our servers.</p>
+  <h2>Information We Collect</h2>
+  <ul>
+    <li><strong>Account information:</strong> When you sign in with Google or Apple, we receive your display name, email address (if provided), and a unique identifier. This is stored in Firebase to operate your account.</li>
+    <li><strong>Messages:</strong> The content of messages you send is stored in Firebase to deliver them to recipients. Messages are retained to provide the service.</li>
+    <li><strong>Device token:</strong> We store your Firebase Cloud Messaging (FCM) token to deliver push notifications for incoming messages.</li>
+    <li><strong>User-generated content reports:</strong> If you report another user, the report details (reporter, reported user, reason) are stored for moderation purposes.</li>
+  </ul>
 
-  <h2>Message Data</h2>
-  <p>Messages are transmitted in real time over a secure Firebase connection and are used solely to deliver haptic vibration patterns to your contact. We do not log, archive, or store message content on our servers.</p>
-  <p>On-device, a rolling buffer of no more than 10 recent messages per connection is kept in local storage solely to render the current session on screen. This buffer is not backed up, not synced to any cloud, and is cleared automatically as new messages arrive. No message history is ever persisted beyond this limit.</p>
-
-  <h2>Account and Authentication</h2>
-  <p>Silent Morse supports sign-in via Google or Apple. Authentication is handled entirely by those providers using their own privacy policies. We only receive a unique user identifier (UID) to identify your account within Firebase - no name, email address, or profile data is stored by us.</p>
-
-  <h2>In-App Purchases</h2>
-  <p>Purchase transactions are processed exclusively by Apple through the App Store. We do not receive or store any payment or billing information.</p>
+  <h2>Advertising</h2>
+  <p>Silent Morse displays ads via <strong>Google AdMob</strong>. AdMob may collect device identifiers and usage data to serve ads. On iOS, the app requests your permission via the App Tracking Transparency (ATT) framework before any tracking occurs. You may decline this request and still use the app normally.</p>
+  <p>You can remove all ads permanently through an in-app purchase.</p>
+  <p>For details on how Google handles ad data, see <a href="https://policies.google.com/privacy">Google's Privacy Policy</a>.</p>
 
   <h2>Third-Party Services</h2>
-  <p>Silent Morse uses Firebase (Google LLC) as its backend infrastructure for real-time messaging and authentication. Firebase's use of data is governed by Google's Privacy Policy at https://policies.google.com/privacy</p>
+  <p>Silent Morse uses the following third-party services:</p>
+  <ul>
+    <li><strong>Firebase</strong> (Google LLC) — authentication, database, cloud functions, push notifications. Governed by <a href="https://policies.google.com/privacy">Google's Privacy Policy</a>.</li>
+    <li><strong>Google AdMob</strong> (Google LLC) — advertising. See above.</li>
+    <li><strong>Google Sign-In / Apple Sign-In</strong> — authentication is handled by these providers under their own privacy policies.</li>
+  </ul>
+
+  <h2>Data Sharing</h2>
+  <p>We do not sell your personal information. Your data may be shared:</p>
+  <ul>
+    <li>With other users as necessary for messaging (e.g., your display name, messages).</li>
+    <li>With service providers (Firebase, AdMob) who help us operate the app.</li>
+    <li>When required by law or to protect our rights.</li>
+  </ul>
+
+  <h2>Data Retention and Deletion</h2>
+  <p>Messages are retained in Firebase to provide the service. You may delete your account at any time through the app's Settings screen, which removes your account data from our systems.</p>
 
   <h2>Children's Privacy</h2>
   <p>Silent Morse is not directed at children under 13. We do not knowingly collect any information from children.</p>
+
+  <h2>Your Rights</h2>
+  <p>Depending on your location, you may have the right to access, correct, or delete your personal data. To exercise these rights, contact us or delete your account through the app.</p>
 
   <h2>Changes to This Policy</h2>
   <p>We may update this Privacy Policy from time to time. Any changes will be reflected on this page with an updated effective date.</p>
 
   <h2>Contact</h2>
-  <p>If you have questions about this Privacy Policy, please contact: pryroinc@gmail.com</p>
+  <p>If you have questions about this Privacy Policy, please contact: <a href="mailto:il_shapiro@hotmail.com">il_shapiro@hotmail.com</a></p>
 
   <footer>
-    2026 Ilya Shapiro. All rights reserved.
+    &copy; 2026 Ilya Shapiro. All rights reserved.
   </footer>
 </body>
 </html>
