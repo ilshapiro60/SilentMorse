@@ -255,9 +255,9 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     _longPressExitTimer?.cancel();
     if (_exiting) return;
     final startY = _pointerStartY[event.pointer];
-    final lastY = _pointerLastY[event.pointer];
     final startX = _pointerStartX[event.pointer];
-    final lastX = _pointerLastX[event.pointer];
+    final endY = event.localPosition.dy;
+    final endX = event.localPosition.dx;
     _pointerStartY.remove(event.pointer);
     _pointerLastY.remove(event.pointer);
     _pointerStartX.remove(event.pointer);
@@ -267,8 +267,8 @@ class _DarkScreenModeState extends State<DarkScreenMode> {
     if (_activePointers.isNotEmpty) return;
 
     final duration = DateTime.now().millisecondsSinceEpoch - _pressStartMs;
-    final dy = (startY != null && lastY != null) ? lastY - startY : 0.0;
-    final dx = (startX != null && lastX != null) ? lastX - startX : 0.0;
+    final dy = startY != null ? endY - startY : 0.0;
+    final dx = startX != null ? endX - startX : 0.0;
     final settings = _settingsSvc.settings;
 
     if (dy.abs() >= _swipeVerticalThreshold) {
