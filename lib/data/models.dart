@@ -61,8 +61,8 @@ class MorseSettings {
   MorseSettings({
     this.dotDurationMs = 200,
     this.dashDurationMs = 300,
-    this.letterGapMs = 1000,
-    this.wordGapMs = 2000,
+    this.letterGapMs = 500,
+    this.wordGapMs = 1200,
     this.vibrationIntensity = VibrationIntensity.medium,
     this.receiveMode = ReceiveMode.vibrate,
     this.sendMode = SendMode.text,

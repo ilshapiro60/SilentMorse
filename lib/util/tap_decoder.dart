@@ -72,12 +72,40 @@ class TapDecoder {
     _currentMorse = '';
     _currentMorseController.add('');
 
+    if (morseSymbols.isEmpty) return;
+
     final decoded = MorseHapticEngine.morseToText(morseSymbols);
-    final char = decoded.isNotEmpty ? decoded[0] : null;
-    if (char != null) {
-      _currentWord.write(char);
+    if (decoded.isNotEmpty) {
+      _currentWord.write(decoded[0]);
+    } else {
+      // Symbols don't match a single character — greedily split into
+      // the longest valid prefixes (handles merged letters like "...---...").
+      _greedySplit(morseSymbols);
     }
     _updateDecodedText();
+  }
+
+  void _greedySplit(String symbols) {
+    var remaining = symbols;
+    while (remaining.isNotEmpty) {
+      String? bestChar;
+      int bestLen = 0;
+      for (int len = remaining.length; len >= 1; len--) {
+        final prefix = remaining.substring(0, len);
+        final decoded = MorseHapticEngine.morseToText(prefix);
+        if (decoded.isNotEmpty) {
+          bestChar = decoded[0];
+          bestLen = len;
+          break;
+        }
+      }
+      if (bestChar != null) {
+        _currentWord.write(bestChar);
+        remaining = remaining.substring(bestLen);
+      } else {
+        remaining = remaining.substring(1);
+      }
+    }
   }
 
   void _commitWord() {
