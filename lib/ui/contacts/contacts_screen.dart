@@ -284,12 +284,12 @@ class _ContactsBodyState extends State<_ContactsBody> {
             chats.where((c) => c.isActive || c.requesterId == myUserId).toList();
 
         // De-duplicate 1-on-1 chats: keep only the most recent chat per partner.
-        final _seenPartner = <String>{};
+        final seenPartner = <String>{};
         final directChats = visible
             .where((c) => !c.isGroup)
             .where((c) {
               final otherId = c.otherParticipant(myUserId);
-              return _seenPartner.add(otherId); // false = already seen → skip
+              return seenPartner.add(otherId); // false = already seen → skip
             })
             .toList();
 
@@ -834,6 +834,11 @@ class _AddContactSheetState extends State<_AddContactSheet> {
             builder: (context) => ChatScreen(chatId: chatId, chatTitle: user.displayName, isGroup: false),
         ),
       );
+    } on BlockedUserException catch (e) {
+      setState(() {
+        _isCreatingChat = false;
+        _error = e.message;
+      });
     } catch (e) {
       setState(() {
         _isCreatingChat = false;

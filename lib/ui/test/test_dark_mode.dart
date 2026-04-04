@@ -282,12 +282,12 @@ class _TestDarkModeState extends State<TestDarkMode> {
                             ),
                           ),
                         ),
-                      Positioned(
+                      const Positioned(
                         left: 0,
                         right: 0,
                         bottom: 24,
                         child: Column(
-                          children: const [
+                          children: [
                             Text(
                               'Short tap = dot • Long press = dash',
                               style: TextStyle(

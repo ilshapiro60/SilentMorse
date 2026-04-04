@@ -42,6 +42,19 @@ exports.createChat = onCall(async (request) => {
 
   const db = admin.firestore();
 
+  const youBlockedThem = await db
+      .collection("users")
+      .doc(myUserId)
+      .collection("blockedUsers")
+      .doc(targetUserId)
+      .get();
+  if (youBlockedThem.exists) {
+    throw new HttpsError(
+        "failed-precondition",
+        "Unblock this user in Settings before starting a chat.",
+    );
+  }
+
   // Look for ANY existing 1-on-1 chat between the two users (any status).
   // We never create a second document for the same pair — instead we
   // reactivate a declined/pending chat or return the existing active one.
@@ -146,6 +159,37 @@ exports.blockUser = onCall(async (request) => {
         blockedAt: admin.firestore.FieldValue.serverTimestamp(),
         chatId: chatId,
       });
+
+  return {success: true};
+});
+
+// ─────────────────────────────────────────────
+// unblockUser — remove from blockedUsers sub-collection
+// ─────────────────────────────────────────────
+
+exports.unblockUser = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const myUserId = request.auth.uid;
+  const targetUserId = request.data.targetUserId;
+
+  if (!targetUserId || typeof targetUserId !== "string") {
+    throw new HttpsError("invalid-argument", "targetUserId is required.");
+  }
+  if (myUserId === targetUserId) {
+    throw new HttpsError("invalid-argument", "Invalid target.");
+  }
+
+  const db = admin.firestore();
+
+  await db
+      .collection("users")
+      .doc(myUserId)
+      .collection("blockedUsers")
+      .doc(targetUserId)
+      .delete();
 
   return {success: true};
 });

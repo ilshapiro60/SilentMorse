@@ -1,10 +1,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide User;
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:rxdart/rxdart.dart';
 
 import '../data/models.dart';
 import '../util/content_filter.dart';
 import '../util/morse_haptic_engine.dart';
+
+/// Thrown when starting a 1:1 chat with someone you have blocked.
+class BlockedUserException implements Exception {
+  const BlockedUserException([
+    this.message = 'You blocked this person. Unblock them in Settings to chat again.',
+  ]);
+  final String message;
+  @override
+  String toString() => message;
+}
 
 /// Base class for chat data. [FirestoreChatRepository] is the real impl;
 /// [MockChatRepository] is used for screenshot capture.
@@ -35,6 +46,7 @@ abstract class ChatRepository {
   Future<User?> findUserByUsername(String username);
   Future<List<User>> findUsersByDisplayName(String query);
   Future<void> blockUser(String targetUserId, String? chatId);
+  Future<void> unblockUser(String targetUserId);
   Future<void> reportUser(String targetUserId, String? chatId, String reason);
   Stream<List<String>> observeBlockedUsers();
 }
@@ -52,37 +64,46 @@ class FirestoreChatRepository extends ChatRepository {
 
   @override
   Stream<List<Chat>> observeChats() {
-    return _firestore
+    final chatsStream = _firestore
         .collection('chats')
         .where('participants', arrayContains: _myUserId)
-        .snapshots()
-        .asyncMap((snapshot) async {
-          final blockedSnap = await _firestore
-              .collection('users')
-              .doc(_myUserId)
-              .collection('blockedUsers')
-              .get();
-          final blockedIds = blockedSnap.docs.map((d) => d.id).toSet();
+        .snapshots();
+    final blockedStream = _firestore
+        .collection('users')
+        .doc(_myUserId)
+        .collection('blockedUsers')
+        .snapshots();
 
-          final chats = snapshot.docs
-              .map((d) => Chat.fromFirestore(d))
-              .where((chat) {
-                if (chat.isGroup) return true;
-                final other = chat.otherParticipant(_myUserId);
-                return !blockedIds.contains(other);
-              })
-              .toList();
+    // Re-emit when either chats OR blockedUsers changes (asyncMap on chats alone
+    // missed block/unblock updates, so the list stayed stale).
+    return Rx.combineLatest2<QuerySnapshot<Map<String, dynamic>>,
+        QuerySnapshot<Map<String, dynamic>>, List<Chat>>(
+      chatsStream,
+      blockedStream,
+      (chatSnap, blockedSnap) {
+        final blockedIds = blockedSnap.docs.map((d) => d.id).toSet();
 
-          chats.sort((a, b) {
-            final ta = a.lastMessageAt;
-            final tb = b.lastMessageAt;
-            if (ta == null && tb == null) return 0;
-            if (ta == null) return 1;
-            if (tb == null) return -1;
-            return tb.compareTo(ta);
-          });
-          return chats;
+        final chats = chatSnap.docs
+            .map((d) => Chat.fromFirestore(d))
+            .where((chat) {
+              if (chat.isGroup) return true;
+              final other = chat.otherParticipant(_myUserId);
+              if (other.isEmpty) return false;
+              return !blockedIds.contains(other);
+            })
+            .toList();
+
+        chats.sort((a, b) {
+          final ta = a.lastMessageAt;
+          final tb = b.lastMessageAt;
+          if (ta == null && tb == null) return 0;
+          if (ta == null) return 1;
+          if (tb == null) return -1;
+          return tb.compareTo(ta);
         });
+        return chats;
+      },
+    );
   }
 
   // ─────────────────────────────────────────────
@@ -91,6 +112,16 @@ class FirestoreChatRepository extends ChatRepository {
 
   @override
   Future<String> getOrCreateChat(String targetUserId) async {
+    final blocked = await _firestore
+        .collection('users')
+        .doc(_myUserId)
+        .collection('blockedUsers')
+        .doc(targetUserId)
+        .get();
+    if (blocked.exists) {
+      throw const BlockedUserException();
+    }
+
     final result = await _functions.httpsCallable('createChat').call({'targetUserId': targetUserId});
     final data = result.data as Map<String, dynamic>;
     return data['chatId'] as String;
@@ -387,6 +418,13 @@ class FirestoreChatRepository extends ChatRepository {
     await _functions.httpsCallable('blockUser').call({
       'targetUserId': targetUserId,
       if (chatId != null) 'chatId': chatId,
+    });
+  }
+
+  @override
+  Future<void> unblockUser(String targetUserId) async {
+    await _functions.httpsCallable('unblockUser').call({
+      'targetUserId': targetUserId,
     });
   }
 

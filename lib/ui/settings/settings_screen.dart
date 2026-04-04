@@ -186,10 +186,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ' • Two fingers = exit',
                 style: TextStyle(color: Colors.white70, fontSize: 12),
               ),
+              const SizedBox(height: 32),
+              _buildBlockedUsersSection(context),
             ],
           );
         },
       ),
+    );
+  }
+
+  Widget _buildBlockedUsersSection(BuildContext context) {
+    final repo = context.read<ChatRepository>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Blocked users',
+          style: TextStyle(
+            color: dotAmber,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'monospace',
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Direct chats stay hidden until you unblock someone.',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        StreamBuilder<List<String>>(
+          stream: repo.observeBlockedUsers(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: dotAmber),
+                  ),
+                ),
+              );
+            }
+            final ids = snap.data ?? [];
+            if (ids.isEmpty) {
+              return const Text(
+                'No blocked users.',
+                style: TextStyle(color: Colors.white38, fontSize: 13),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final uid in ids)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _BlockedUserRow(userId: uid, repo: repo),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -544,6 +604,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: const Text('Restore purchase', style: TextStyle(color: Colors.white70)),
         ),
       ],
+    );
+  }
+}
+
+Future<void> _confirmUnblock(
+  BuildContext context,
+  ChatRepository repo,
+  String userId,
+  String displayLabel,
+) async {
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: inkDark,
+      title: const Text('Unblock?', style: TextStyle(color: Colors.white)),
+      content: Text(
+        '$displayLabel will be able to message you again and their chat will reappear in your list.',
+        style: const TextStyle(color: Colors.white70),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.orange,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Unblock'),
+        ),
+      ],
+    ),
+  );
+  if (confirm != true || !context.mounted) return;
+  try {
+    await repo.unblockUser(userId);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$displayLabel unblocked')),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not unblock: $e')),
+      );
+    }
+  }
+}
+
+class _BlockedUserRow extends StatelessWidget {
+  const _BlockedUserRow({required this.userId, required this.repo});
+
+  final String userId;
+  final ChatRepository repo;
+
+  String _label(User? u) {
+    if (u == null) return 'Unknown user';
+    if (u.displayName.trim().isNotEmpty) return u.displayName.trim();
+    if (u.username.isNotEmpty) return '@${u.username}';
+    return userId;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<User?>(
+      future: repo.getUserById(userId),
+      builder: (context, snap) {
+        final u = snap.data;
+        final label = _label(u);
+        return Container(
+          decoration: BoxDecoration(
+            color: inkSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: inkSurfaceVariant),
+          ),
+          child: ListTile(
+            title: Text(
+              label,
+              style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+            ),
+            subtitle: u != null && u.username.isNotEmpty && u.displayName.trim().isNotEmpty
+                ? Text(
+                    '@${u.username}',
+                    style: const TextStyle(color: dotAmber, fontSize: 12, fontFamily: 'monospace'),
+                  )
+                : null,
+            trailing: TextButton(
+              onPressed: () => _confirmUnblock(context, repo, userId, label),
+              child: const Text('Unblock', style: TextStyle(color: Colors.orange)),
+            ),
+          ),
+        );
+      },
     );
   }
 }

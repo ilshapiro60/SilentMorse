@@ -129,6 +129,9 @@ class MockChatRepository extends ChatRepository {
   Future<void> blockUser(String targetUserId, String? chatId) async {}
 
   @override
+  Future<void> unblockUser(String targetUserId) async {}
+
+  @override
   Future<void> reportUser(String targetUserId, String? chatId, String reason) async {}
 
   @override
