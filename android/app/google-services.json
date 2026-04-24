@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "747344694468-e1bkojsq67udb7eq8sk05u3e9ld2m7vs.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.silentmorse.messenger",
+            "certificate_hash": "c74670db263bb50771bd6964ef3200cc116d1837"
+          }
+        },
+        {
           "client_id": "747344694468-qc5hfn4e5u0i584bpqs4n77u3le7lkm4.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -37,6 +45,13 @@
             {
               "client_id": "747344694468-rflplpsq6d6jef3ovrqash6p19vhaduj.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "747344694468-dv2io7gm3ls4qfafnbuld956i44e21ce.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.silentmorse.messenger"
+              }
             }
           ]
         }

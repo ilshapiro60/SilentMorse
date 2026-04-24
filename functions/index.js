@@ -11,7 +11,14 @@ setGlobalOptions({maxInstances: 10});
 // ─────────────────────────────────────────────
 
 exports.appleSignInCallback = onRequest((req, res) => {
-  const params = new URLSearchParams(req.body).toString();
+  let params;
+  if (typeof req.body === "string") {
+    params = req.body;
+  } else if (req.body && typeof req.body === "object") {
+    params = new URLSearchParams(req.body).toString();
+  } else {
+    params = "";
+  }
   const intentUrl =
     `intent://callback?${params}` +
     `#Intent;package=com.silentmorse.messenger;` +

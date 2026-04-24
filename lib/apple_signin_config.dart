@@ -3,4 +3,4 @@
 ///
 /// Fill these in after creating a Service ID in the Apple Developer Portal.
 const String appleSignInClientId = 'com.silentmorse.messenger.service';
-const String appleSignInRedirectUri = 'https://silent-morse-messenger.firebaseapp.com/__/auth/handler';
+const String appleSignInRedirectUri = 'https://us-central1-silent-morse-messenger.cloudfunctions.net/appleSignInCallback';
